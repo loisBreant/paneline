@@ -7,7 +7,7 @@ import { palette } from "../hooks/palette";
 
 type Pane = Mounted<"terminal", "Pane">;
 type Node = { type: string; props?: Record<string, unknown>; children?: unknown[] };
-type Line = { text: string; outerTexts: Node[]; allTexts: Node[]; hasButton: boolean };
+type Line = { text: string; outerTexts: Node[]; allTexts: Node[]; buttonLabels: unknown[] };
 type EngineListing = { id: string; type: string; description: string; status: string };
 type LoggedLine = { to: string; text: string };
 
@@ -737,7 +737,7 @@ async function redrawTimes(pane: Pane, times: number): Promise<void> {
 
 async function bodyLines(pane: Pane): Promise<Line[]> {
   const lines = linesOf(await pane.drawn());
-  return lines.filter((line) => !line.hasButton && line.text !== "");
+  return lines.filter((line) => !isTabBar(line) && line.text !== "");
 }
 
 async function rowTexts(pane: Pane): Promise<string[]> {
@@ -780,7 +780,7 @@ function lineOf(node: Node): Line {
     text: textOf(node),
     outerTexts: outerTextsIn(node),
     allTexts: allTextsIn(node),
-    hasButton: holds(node, "Button"),
+    buttonLabels: buttonsIn(node).map((button) => button.props?.label),
   };
 }
 
@@ -796,8 +796,13 @@ function holdsColumn(node: Node): boolean {
   );
 }
 
-function holds(node: Node, type: string): boolean {
-  return node.type === type || elementsIn(node).some((child) => holds(child, type));
+function buttonsIn(node: Node): Node[] {
+  const own = node.type === "Button" ? [node] : [];
+  return [...own, ...elementsIn(node).flatMap(buttonsIn)];
+}
+
+function isTabBar(line: Line): boolean {
+  return line.buttonLabels.some((label) => TAB_LABELS.includes(String(label)));
 }
 
 function outerTextsIn(node: Node): Node[] {

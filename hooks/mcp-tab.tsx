@@ -5,22 +5,25 @@ import { markContextStale, mcpBreakdown } from "./breakdown";
 import { singleLine } from "./format";
 import { mcpCommandName } from "./mcp-name";
 import { mcpTab } from "./mcp-draw";
+import { TOOL_USES_KEY } from "./mcp-track";
 import { PANE } from "./pane-tab";
 import { isShownTab, justEntered } from "./shown-tab";
 import { disabledServersOf, projectRootOf, scopeIndexOf } from "./servers";
 import type { McpAction, ScopeIndex } from "./servers";
+import { withoutFolder } from "./use-counts";
+import type { UseCounts } from "./use-counts";
 
 export const MCP_TAB = { id: "mcp", label: "MCP" };
 
-const DARK_THEME_PREFIX = "dark";
 const UNSAFE_SERVER_NAME = /[\s\p{Cc}]/u;
 
-const themeAtom = atom({ plugin: "paneline", key: "theme" } as const, "dark");
-const mcpSeenAtom = atom({ plugin: "paneline", key: "mcpSeen" } as const, [] as string[]);
-const mcpSelectedAtom = atom(
-  { plugin: "paneline", key: "mcpSelected" } as const,
-  null as string | null,
+const launchFolderAtom = atom({ plugin: "paneline", key: "launchFolder" } as const, "");
+const toolUsesAtom = atom(
+  { plugin: "paneline", key: "toolUses" } as const,
+  {} as Record<string, number>,
 );
+const mcpSeenAtom = atom({ plugin: "paneline", key: "mcpSeen" } as const, [] as string[]);
+const mcpOpenAtom = atom({ plugin: "paneline", key: "mcpOpen" } as const, [] as string[]);
 const mcpQueuedAtom = atom({ plugin: "paneline", key: "mcpQueued" } as const, [] as string[]);
 
 const CLAUDE_CONFIG_FILE = ".claude.json";
@@ -45,13 +48,13 @@ export function registerMcpTab(on: On): void {
       markContextStale();
       configured = null;
     }
-    const [loaded, context, seen, queuedServers, selectedServer, theme] = await Promise.all([
+    const [loaded, context, seen, queuedServers, openServers, toolUses] = await Promise.all([
       configured ?? loadConfig($),
       mcpBreakdown((args) => $.session.usage(args)),
       read($, mcpSeenAtom),
       read($, mcpQueuedAtom),
-      read($, mcpSelectedAtom),
-      read($, themeAtom),
+      read($, mcpOpenAtom),
+      read($, toolUsesAtom),
     ]);
     configured = loaded;
     return mcpTab($.ui.resolve(e), {
@@ -60,12 +63,23 @@ export function registerMcpTab(on: On): void {
       disabledServers: [...new Set([...seen, ...loaded.disabled])],
       scopes: loaded.scopes,
       queuedServers,
-      selectedServer,
-      isDarkTheme: theme.startsWith(DARK_THEME_PREFIX),
-      select: (server) => void update($, mcpSelectedAtom, () => server),
+      openServers: new Set(openServers),
+      toolUses,
+      clearUses: () => void clearToolUses($),
+      toggle: (server) =>
+        void update($, mcpOpenAtom, (list) =>
+          list.includes(server) ? list.filter((open) => open !== server) : [...list, server],
+        ),
       act: (action, server) => void requestMcp($, action, server, context),
     });
   });
+}
+
+async function clearToolUses($: EngineInterface): Promise<void> {
+  const folder = await read($, launchFolderAtom);
+  const stored = ((await $.store.get(TOOL_USES_KEY)) ?? {}) as UseCounts;
+  await $.store.set(TOOL_USES_KEY, withoutFolder(stored, folder));
+  await update($, toolUsesAtom, () => ({}));
 }
 
 async function loadConfig($: EngineInterface): Promise<McpConfig> {

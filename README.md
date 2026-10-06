@@ -5,7 +5,7 @@
 
 ![paneline in a Claude Code session](docs/screenshots/hero.png)
 
-paneline is a Claude Code mod (plugin) that adds a side pane with Activity, Files, Agents, Context and MCP tabs, a status line above the prompt, a restyled chat, terminal Mermaid diagrams, tables, code panels and diff panels. Colours follow your session `/color` and `/theme`.
+paneline is a Claude Code mod (plugin) that adds a side pane with Activity, Files, Agents, Context, MCP and Skills tabs, a status line above the prompt, a restyled chat, terminal Mermaid diagrams, tables, code panels and diff panels. Colours follow your session `/color` and `/theme`.
 
 ## How it looks
 
@@ -58,6 +58,20 @@ Context tab
 ![MCP tab](docs/screenshots/mcp.png)
 
 MCP tab
+
+## Skills and usage stats
+
+![Skills tab](docs/screenshots/skills.png)
+
+The Skills tab lists your skills grouped by owner: User, Project, plugins and Built-in.
+
+- Click a skill name to put `/name ` in the input. Press Enter to run it.
+- Click the arrow before a name to open its description under the row.
+- Top used shows the skills you ran most in this project. Its `clear` button wipes this project's skill counts.
+
+The MCP tab shows each server row as `N tools · N uses`. Open a server to list its tools with their use counts. `clear usage stats` on the title line wipes this project's tool counts, never the servers.
+
+Activity, Files and Agents each have a clear button. It hides everything before the click and shows only what comes later. Running agents stay.
 
 ## Install
 

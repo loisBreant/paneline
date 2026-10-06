@@ -2,7 +2,8 @@ import type { ElementTable, RenderElement } from "claude-code";
 
 import type { AgentNode, AgentTree } from "../types";
 import type { TreeRow } from "./agents-model";
-import { visibleRows } from "./agents-model";
+import { hasFinished, visibleRows } from "./agents-model";
+import { clearButton } from "./clear-kit";
 import { formatDuration, formatTokens, shortModel } from "./format";
 import { bar, gapRow, header, paneRow, paneHeaderLook, statusDot } from "./pane-kit";
 import { paneInk } from "./pane-ink";
@@ -18,6 +19,7 @@ export type AgentsView = {
   now: number;
   width: number;
   height: number;
+  clear: () => void;
 };
 
 type Shown = { row: TreeRow; prefix: string; spacer: string; continuation: string };
@@ -126,6 +128,11 @@ function mainRow(ui: Ui, view: AgentsView): RenderElement {
           </Text>
         </Box>
       )}
+      {hasFinished(view.agents) ? (
+        <Box flexShrink={0} marginLeft={1}>
+          {clearButton(ui, view.clear)}
+        </Box>
+      ) : null}
     </Box>
   );
 }

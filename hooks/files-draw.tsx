@@ -1,5 +1,6 @@
 import type { ElementTable, RenderElement } from "claude-code";
 
+import { headerWithClear } from "./clear-kit";
 import { filesModel, unfoldedRows } from "./files-model";
 import type { AgentTotal, Change, FileTreeRow, FilesSource } from "./files-model";
 import { header, paneRow, paneHeaderLook, plural } from "./pane-kit";
@@ -14,6 +15,7 @@ export type FilesView = FilesSource & {
   width: number;
   folded: Record<string, boolean>;
   toggleFolder: (key: string, isFolded: boolean) => void;
+  clear: () => void;
 };
 
 const AUTO_FOLD_ROWS = 60;
@@ -35,7 +37,9 @@ export function filesTab(ui: Ui, view: FilesView): RenderElement {
   const glyphs = treeGlyphs(rows);
   return (
     <Box flexDirection="column">
-      {header(ui, "Files", paneHeaderLook(), view.width)}
+      {model.fileCount === 0
+        ? header(ui, "Files", paneHeaderLook(), view.width)
+        : headerWithClear(ui, "Files", view.width, view.clear)}
       {model.fileCount === 0 ? (
         <Text color={paneInk().muted} wrap="truncate-end">
           No files touched yet.

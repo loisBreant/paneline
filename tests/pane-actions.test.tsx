@@ -2,6 +2,8 @@ import { describe, expect, mock, test } from "claude-code/testing";
 import type { On } from "claude-code";
 import type { Engine, MockClock, Mounted } from "claude-code/testing";
 
+import { pressAction, pressServer } from "./mcp-tree";
+
 type Pane = Mounted<"terminal", "Pane">;
 type World = {
   commands: string[];
@@ -54,7 +56,8 @@ describe("mcp actions", () => {
     const world = worldOf(on);
     const pane = await paneOnTab($, "MCP");
 
-    await press(pane, "disable", 0);
+    await pressServer(pane, "my server");
+    await pressAction(pane, "my server", "disable");
 
     expect(world.commands).toEqual([]);
     expect(world.toasts).toHaveLength(1);

@@ -5,6 +5,7 @@ import { AGENTS_TAB, registerAgentsTab } from "./agents-tab";
 import { CONTEXT_TAB, registerContextTab } from "./context-tab";
 import { FILES_TAB, registerFilesTab } from "./files-tab";
 import { MCP_TAB, registerMcpTab } from "./mcp-tab";
+import { registerSkillsTab, SKILLS_TAB } from "./skills-tab";
 import type { TabEntry } from "./tab-bar";
 
 export const TABS: [TabEntry, ...TabEntry[]] = [
@@ -13,6 +14,7 @@ export const TABS: [TabEntry, ...TabEntry[]] = [
   AGENTS_TAB,
   CONTEXT_TAB,
   MCP_TAB,
+  SKILLS_TAB,
 ];
 
 export function registerTabs(on: On): void {
@@ -21,4 +23,5 @@ export function registerTabs(on: On): void {
   registerAgentsTab(on);
   registerContextTab(on);
   registerMcpTab(on);
+  registerSkillsTab(on);
 }

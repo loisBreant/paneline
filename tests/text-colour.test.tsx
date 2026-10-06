@@ -96,10 +96,13 @@ describe("text carries an explicit theme colour", () => {
     });
   }
 
-  test("TC7 the MCP tab draws each server name as one undimmed button in a dark theme and its actions dim under it", async ($, on) => {
+  test("TC7 the MCP tab draws each server name as one undimmed button in a dark theme and the actions of an opened server dim under it", async ($, on) => {
     paneWorld(on);
+    const pane = await openedPane($, "MCP");
 
-    const tree = await paneOnTab($, "MCP");
+    await pane.press({ key: "docs" });
+
+    const tree = await pane.drawn();
 
     const names = collect(tree, "Button").filter((node) =>
       ["docs", "linear"].includes(String(node.props?.label)),
@@ -115,7 +118,7 @@ describe("text carries an explicit theme colour", () => {
   });
 
   for (const tab of ["MCP", "Activity"]) {
-    test(`TC7b the ${tab} tab dims its name labels in a light theme`, async ($, on) => {
+    test(`TC7b the ${tab} tab draws its clickable name labels in full text colour, not dim, in a light theme`, async ($, on) => {
       paneWorld(on, "light");
       await $.session.start({ cwd: CWD, surface: "terminal", isInteractive: true });
 
@@ -123,12 +126,12 @@ describe("text carries an explicit theme colour", () => {
 
       const labels = collect(tree, "Button").filter(isNameLabel);
       expect(labels.length).toBeGreaterThan(0);
-      expect(labels.map((node) => node.props?.dimColor)).toEqual(labels.map(() => true));
+      expect(labels.map((node) => node.props?.dimColor === true)).toEqual(labels.map(() => false));
     });
   }
 
   for (const theme of ["light", "light-ansi", "light-daltonized", "auto"]) {
-    test(`TC7c the MCP tab dims its server names and draws its headings in the theme text colour under ${theme}, which may sit on a light fill`, async ($, on) => {
+    test(`TC7c the MCP tab draws its server names not dim and its headings in the theme text colour under ${theme}, which may sit on a light fill`, async ($, on) => {
       paneWorld(on, theme);
       await $.session.start({ cwd: CWD, surface: "terminal", isInteractive: true });
 
@@ -137,7 +140,10 @@ describe("text carries an explicit theme colour", () => {
       const names = collect(tree, "Button").filter((node) =>
         ["docs", "linear"].includes(String(node.props?.label)),
       );
-      expect(names.map((node) => node.props?.dimColor)).toEqual([true, true]);
+      expect(names.map((node) => [node.props?.label, node.props?.dimColor === true])).toEqual([
+        ["docs", false],
+        ["linear", false],
+      ]);
       const colors = collect(tree, "Text")
         .filter((node) => node.props?.bold === true)
         .map((node) => node.props?.color);
@@ -148,6 +154,17 @@ describe("text carries an explicit theme colour", () => {
 
   test("TC8 pressing an MCP server name button opens its actions", async ($, on) => {
     paneWorld(on);
+    const pane = await openedPane($, "MCP");
+
+    await pane.press({ key: "linear" });
+
+    const labels = (await pane.findAll({ type: "Button" })).map((node) => node.props.label);
+    expect(labels).toContain("reconnect");
+  });
+
+  test("TC8b pressing an MCP server name button in a light theme opens its actions", async ($, on) => {
+    paneWorld(on, "light");
+    await $.session.start({ cwd: CWD, surface: "terminal", isInteractive: true });
     const pane = await openedPane($, "MCP");
 
     await pane.press({ key: "linear" });

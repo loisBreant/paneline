@@ -124,6 +124,28 @@ export function reconciled(tree: AgentTree, list: ListedAgent[], at: number): Ag
   }, tree);
 }
 
+export function hasFinished(tree: AgentTree): boolean {
+  return Object.values(tree).some((node) => FINISHED.includes(node.status));
+}
+
+function finishKey(node: AgentNode): string {
+  return `${node.id}@${node.endedAt ?? ""}`;
+}
+
+export function finishedKeys(tree: AgentTree): string[] {
+  return Object.values(tree)
+    .filter((node) => FINISHED.includes(node.status))
+    .map(finishKey);
+}
+
+export function withoutCleared(tree: AgentTree, keys: string[]): AgentTree {
+  return Object.fromEntries(
+    Object.entries(tree).filter(
+      ([, node]) => !(FINISHED.includes(node.status) && keys.includes(finishKey(node))),
+    ),
+  );
+}
+
 export function pruned(tree: AgentTree, max = KEPT_AGENTS): AgentTree {
   const nodes = Object.values(tree);
   const excess = nodes.length - max;

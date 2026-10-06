@@ -3,6 +3,16 @@ import type { On, SessionContextBreakdown } from "claude-code";
 import type { Engine, Mounted } from "claude-code/testing";
 
 import { palette } from "../hooks/palette";
+import {
+  bodyOf,
+  hollowRowOf,
+  lines,
+  pressAction,
+  pressServer,
+  rowOrFail,
+  serverEntriesOf,
+  summaryOf,
+} from "./mcp-tree";
 
 type Pane = Mounted<"terminal", "Pane">;
 type Node = { type: string; props?: Record<string, unknown>; children?: unknown[] };
@@ -25,21 +35,24 @@ const LINEAR_AND_DOCS = [
 ];
 
 describe("mcp tab", () => {
-  test("M1 the tab opens with a title, the server count, and one row per server with its tool count", async ($, on) => {
+  test("M1 the tab opens with a title, the server count, and one closed row per server with its tool count", async ($, on) => {
     worldOf(on);
 
     const pane = await paneOnTab($, "MCP");
 
+    const shown = await lines(pane);
     const rows = await rowTexts(pane);
     expect(rows).toContain("Manage MCP servers");
     expect(rows).toContain("2 servers");
-    expect(rows).toContain("✔linear2 tools");
-    expect(rows).toContain("✔docs1 tool");
+    expect([summaryOf(shown, "linear"), summaryOf(shown, "docs")]).toEqual([
+      { glyph: "▸", tools: "2 tools", uses: "0 uses" },
+      { glyph: "▸", tools: "1 tool", uses: "0 uses" },
+    ]);
     expect(await buttonLabels(pane)).toEqual(expect.arrayContaining(["linear", "docs"]));
     expect(await colorsOf(pane, "Manage MCP servers")).toEqual([palette.userText]);
   });
 
-  test("M2 the tools column is aligned and a connected server shows a green check", async ($, on) => {
+  test("M2 the counts column is aligned and a connected server shows a green check", async ($, on) => {
     const world = worldOf(on);
     world.breakdown.mcpTools = [
       ...LINEAR_AND_DOCS,
@@ -57,9 +70,9 @@ describe("mcp tab", () => {
       (box) => box.props.justifyContent === "flex-end",
     );
     expect(columns.map((box) => box.props.width)).toEqual([
-      "10 tools".length,
-      "10 tools".length,
-      "10 tools".length,
+      "10 tools · 0 uses".length,
+      "10 tools · 0 uses".length,
+      "10 tools · 0 uses".length,
     ]);
     expect((await colorsOf(pane, "✔")).filter((color) => color !== undefined)).toEqual([
       palette.ok,
@@ -68,44 +81,54 @@ describe("mcp tab", () => {
     ]);
   });
 
-  test("M3 clicking a server selects it and shows its actions on one row under it", async ($, on) => {
+  test("M3 clicking a server opens it and shows its actions on one row under it, the other servers stay closed", async ($, on) => {
     worldOf(on);
     const pane = await paneOnTab($, "MCP");
+    const labelsBefore = await buttonLabels(pane);
 
-    expect(await buttonLabels(pane)).toEqual(expect.arrayContaining(["reconnect", "disable"]));
-    expect((await buttonLabels(pane)).filter((label) => label === "disable")).toHaveLength(1);
-    await pressNth(pane, "docs", 0);
+    await pressServer(pane, "docs");
 
-    expect(await rowTexts(pane)).toContain("✔docs1 tool");
+    const shown = await lines(pane);
+    expect(labelsBefore).not.toContain("reconnect");
+    expect(labelsBefore).not.toContain("disable");
+    expect(summaryOf(shown, "docs").glyph).toBe("▾");
+    expect(bodyOf(shown, "docs")[0]?.text).toBe("reconnect disable");
+    expect(bodyOf(shown, "linear")).toEqual([]);
     expect((await buttonLabels(pane)).filter((label) => label === "reconnect")).toHaveLength(1);
   });
 
   test("M4 pressing an action runs the mcp command and marks the server queued", async ($, on) => {
     const world = worldOf(on);
     const pane = await paneOnTab($, "MCP");
+    await pressServer(pane, "linear");
 
-    await pressNth(pane, "reconnect", 0);
+    await pressAction(pane, "linear", "reconnect");
 
     expect(world.commands).toEqual(["reconnect linear"]);
-    expect(await rowTexts(pane)).toContain("✔linearqueued");
+    expect((await rowTexts(pane)).some((text) => /✔\s*linear\s*queued$/u.test(text))).toBe(true);
     await finishCommands(world, pane);
     await pane.redraw();
-    expect(await rowTexts(pane)).toContain("✔linear2 tools");
+    expect(rowOrFail(await lines(pane), "linear").tools).toBe("2 tools");
   });
 
-  test("M4b a server that left the tool list stays listed with a hollow circle and an enable button when selected", async ($, on) => {
+  test("M4b a server that left the tool list stays listed with a hollow circle and an enable button when opened", async ($, on) => {
     const world = worldOf(on);
     const pane = await paneOnTab($, "MCP");
-    await pressNth(pane, "disable", 0);
+    await pressServer(pane, "linear");
+    await pressAction(pane, "linear", "disable");
     await finishCommands(world, pane);
+    await pressServer(pane, "linear");
     world.breakdown.mcpTools = LINEAR_AND_DOCS.filter((tool) => tool.serverName === "docs");
     await $.session.measure({ context: { window: 200_000 }, rateLimits: [], changed: [] });
     await pane.redraw();
 
-    expect(await rowTexts(pane)).toContain("○linear");
-    await pressNth(pane, "linear", 0);
-    expect(await buttonLabels(pane)).toContain("enable");
-    await pressNth(pane, "enable", 0);
+    const hollow = hollowRowOf(await lines(pane), "linear");
+    await pressServer(pane, "linear");
+    const offered = await buttonLabels(pane);
+    await pressAction(pane, "linear", "enable");
+
+    expect(hollow).toBeDefined();
+    expect(offered).toContain("enable");
     expect(world.commands).toEqual(["disable linear", "enable linear"]);
   });
 
@@ -149,14 +172,15 @@ describe("mcp tab", () => {
     ];
     const pane = await paneOnTab($, "MCP");
 
-    expect(await buttonLabels(pane)).toEqual(
+    expect(serverEntriesOf(await lines(pane)).map(([, name]) => name)).toEqual(
       expect.arrayContaining(["plugin:runpod:runpod", "claude-in-chrome"]),
     );
-    await pressNth(pane, "disable", 0);
+    await pressServer(pane, "plugin:runpod:runpod");
+    await pressAction(pane, "plugin:runpod:runpod", "disable");
     expect(world.commands).toEqual(["disable plugin:runpod:runpod"]);
     await finishCommands(world, pane);
-    await pressNth(pane, "claude-in-chrome", 0);
-    await pressNth(pane, "disable", 0);
+    await pressServer(pane, "claude-in-chrome");
+    await pressAction(pane, "claude-in-chrome", "disable");
     expect(world.commands).toEqual(["disable plugin:runpod:runpod", "disable claude-in-chrome"]);
   });
 

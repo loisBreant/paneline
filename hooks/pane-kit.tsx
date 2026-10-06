@@ -31,8 +31,6 @@ type ButtonSpec = {
   backgroundColor?: string;
 };
 
-type LabelSpec = ButtonSpec & { isLight: boolean };
-
 export type Accent = string | null;
 
 export function accentLook(accent: Accent, fallbackColor: string): HeaderLook {
@@ -222,13 +220,13 @@ export function isLightTheme(theme: string): boolean {
   return theme.startsWith("light");
 }
 
-export function labelButton({ Button }: Ui, spec: LabelSpec): RenderElement {
+export function labelButton({ Button }: Ui, spec: ButtonSpec): RenderElement {
   return (
     <Button
       key={spec.key}
       label={spec.label}
       plain
-      dimColor={spec.isLight}
+      dimColor={false}
       hover={{
         color: paneInk().text ?? paneInk().section,
         scope: spec.key.slice(0, HOVER_SCOPE_CELLS),

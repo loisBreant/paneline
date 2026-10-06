@@ -2,6 +2,8 @@ import { describe, expect, mock, test } from "claude-code/testing";
 import type { On, SessionContextBreakdown } from "claude-code";
 import type { Engine, Mounted } from "claude-code/testing";
 
+import { lines, serverEntriesOf } from "./mcp-tree";
+
 type Pane = Mounted<"terminal", "Pane">;
 
 const COLUMNS = 60;
@@ -21,17 +23,12 @@ describe("mcp tab disabled servers", () => {
 
     const pane = await paneOnTab($);
 
-    expect(await buttonLabels(pane)).toEqual([
-      "Activity",
-      "Files",
-      "Agents",
-      "Context",
-      "claude.ai Trello",
-      "enable",
-      "linear",
-      "plugin:runpod:runpod",
-      "my_server",
-      "from-mcp-json",
+    expect(serverEntriesOf(await lines(pane))).toEqual([
+      ["○", "claude.ai Trello"],
+      ["✔", "linear"],
+      ["○", "plugin:runpod:runpod"],
+      ["○", "my_server"],
+      ["○", "from-mcp-json"],
     ]);
     expect(await textCount(pane, "5 servers")).toBe(1);
   });

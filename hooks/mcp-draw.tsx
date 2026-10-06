@@ -1,11 +1,18 @@
-import type { ElementTable, RenderElement, SessionContextBreakdown } from "claude-code";
+import type {
+  ContextMcpTool,
+  ElementTable,
+  RenderElement,
+  SessionContextBreakdown,
+} from "claude-code";
 
 import { singleLine } from "./format";
 import { mcpCommandName } from "./mcp-name";
-import { labelButton, plural } from "./pane-kit";
+import { header, labelButton, paneHeaderLook, plural } from "./pane-kit";
 import { paneInk } from "./pane-ink";
 import { SCOPE_GROUPS, scopeOf, serversOf } from "./servers";
 import type { McpAction, McpScope, ScopeIndex, Server } from "./servers";
+import { rankedUses } from "./use-counts";
+import type { UseEntry } from "./use-counts";
 
 type Ui = ElementTable;
 
@@ -15,10 +22,11 @@ export type McpView = {
   disabledServers: string[];
   scopes: ScopeIndex;
   queuedServers: string[];
-  selectedServer: string | null;
-  select: (server: string) => void;
+  openServers: Set<string>;
+  toggle: (server: string) => void;
   act: (action: McpAction, server: string) => void;
-  isDarkTheme: boolean;
+  toolUses: Record<string, number>;
+  clearUses: () => void;
 };
 
 type Card = {
@@ -27,11 +35,15 @@ type Card = {
   detail: string;
   isLive: boolean;
   actions: McpAction[];
+  tools: UseEntry[];
 };
 
 type Group = { scope: McpScope; heading: string; cards: Card[] };
 
 const ACTIONS_INDENT_CELLS = 2;
+const OPEN_GLYPH = "▾";
+const FOLDED_GLYPH = "▸";
+const CLEAR_LABEL = "clear usage stats";
 
 export function mcpTab(ui: Ui, view: McpView): RenderElement {
   const { Box, Text } = ui;
@@ -53,42 +65,43 @@ export function mcpTab(ui: Ui, view: McpView): RenderElement {
     );
   }
   const detailCells = Math.max(...cards.map((card) => card.detail.length));
-  const nameCells = Math.max(...cards.map((card) => card.name.length));
-  const selected =
-    view.selectedServer !== null && cards.some((card) => card.name === view.selectedServer)
-      ? view.selectedServer
-      : cards[0]?.name;
   return (
     <Box flexDirection="column" width={view.width}>
-      <Text bold color={paneInk().text} wrap="truncate-end">
-        Manage MCP servers
-      </Text>
+      {titleRow(ui, view)}
       <Text color={paneInk().muted} wrap="truncate-end">
         {`${cards.length} ${plural("server", cards.length)}`}
       </Text>
       <Box height={1} />
       {groups.flatMap((group, index) => [
         ...(index > 0 ? [<Box key={`${group.scope}-gap`} height={1} />] : []),
-        headingRow(ui, group, view),
+        header(ui, group.heading, paneHeaderLook(), view.width),
         ...group.cards.flatMap((card) =>
-          cardRows(ui, card, { view, detailCells, nameCells, isSelected: card.name === selected }),
+          cardRows(ui, card, {
+            view,
+            detailCells,
+            isOpen: view.openServers.has(card.name),
+          }),
         ),
       ])}
     </Box>
   );
 }
 
-function headingRow(ui: Ui, group: Group, { width, isDarkTheme }: McpView): RenderElement {
-  const { Box, Text } = ui;
-  const ruleCells = Math.max(0, width - group.heading.length - 1);
+function titleRow(ui: Ui, view: McpView): RenderElement {
+  const { Box, Button, Text } = ui;
+  const hasUses = Object.values(view.toolUses).some((uses) => uses > 0);
   return (
-    <Box key={`${group.scope}-heading`} flexDirection="row" width={width} height={1} columnGap={1}>
-      <Text bold color={isDarkTheme ? paneInk().section : paneInk().text} wrap="truncate-end">
-        {group.heading}
-      </Text>
-      <Text color={paneInk().rule} wrap="truncate-end">
-        {"─".repeat(ruleCells)}
-      </Text>
+    <Box flexDirection="row" width={view.width} columnGap={1}>
+      <Box flexGrow={1}>
+        <Text bold color={paneInk().text} wrap="truncate-end">
+          Manage MCP servers
+        </Text>
+      </Box>
+      {hasUses && (
+        <Box flexShrink={0}>
+          <Button key="clear-uses" label={CLEAR_LABEL} plain dimColor onPress={view.clearUses} />
+        </Box>
+      )}
     </Box>
   );
 }
@@ -109,45 +122,73 @@ function cardsOf(live: Server[], view: McpView): Card[] {
   const liveNames = new Set(named.map((server) => server.name));
   const disabled = view.disabledServers.filter((name) => !liveNames.has(name));
   return [
-    ...named.map((server) => ({
-      name: server.name,
-      scope: scopeOf(server.name, view.scopes),
-      detail: `${server.tools} ${plural("tool", server.tools)}`,
-      isLive: true,
-      actions: ["reconnect", "disable"] as McpAction[],
-    })),
+    ...named.map((server) => {
+      const tools = toolRowsOf(view.context?.mcpTools ?? [], server.name, view.toolUses);
+      const uses = tools.reduce((sum, tool) => sum + tool.uses, 0);
+      return {
+        name: server.name,
+        scope: scopeOf(server.name, view.scopes),
+        detail: `${server.tools} ${plural("tool", server.tools)} · ${uses} ${plural("use", uses)}`,
+        isLive: true,
+        actions: ["reconnect", "disable"] as McpAction[],
+        tools,
+      };
+    }),
     ...disabled.map((name) => ({
       name,
       scope: scopeOf(name, view.scopes),
-      detail: "",
+      detail: `${usesOfServer(name, view.toolUses)} ${plural("use", usesOfServer(name, view.toolUses))}`,
       isLive: false,
       actions: ["enable"] as McpAction[],
+      tools: [],
     })),
   ].map((card) =>
     view.queuedServers.includes(card.name) ? { ...card, detail: "queued", actions: [] } : card,
   );
 }
 
-type RowLook = { view: McpView; detailCells: number; nameCells: number; isSelected: boolean };
+function usesOfServer(serverName: string, toolUses: Record<string, number>): number {
+  const prefix = `mcp__${serverName}__`;
+  return Object.entries(toolUses)
+    .filter(([tool]) => tool.startsWith(prefix))
+    .reduce((sum, [, uses]) => sum + uses, 0);
+}
 
-function cardRows(
-  ui: Ui,
-  card: Card,
-  { view, detailCells, nameCells, isSelected }: RowLook,
-): RenderElement[] {
+function toolRowsOf(
+  tools: ContextMcpTool[],
+  serverName: string,
+  toolUses: Record<string, number>,
+): UseEntry[] {
+  const ofServer = tools.filter((tool) => mcpCommandName(tool.serverName) === serverName);
+  return rankedUses(
+    Object.fromEntries(
+      ofServer.map((tool) => [
+        tool.name.replace(`mcp__${tool.serverName}__`, ""),
+        toolUses[tool.name] ?? 0,
+      ]),
+    ),
+  );
+}
+
+type RowLook = { view: McpView; detailCells: number; isOpen: boolean };
+
+function cardRows(ui: Ui, card: Card, { view, detailCells, isOpen }: RowLook): RenderElement[] {
   const { Box, Button, Text } = ui;
+  const toggle = () => view.toggle(card.name);
   const rows: RenderElement[] = [
     <Box key={`${card.name}-name`} flexDirection="row" width={view.width} height={1} columnGap={1}>
+      <Button
+        key={`${card.name}-toggle`}
+        label={isOpen ? OPEN_GLYPH : FOLDED_GLYPH}
+        plain
+        dimColor
+        onPress={toggle}
+      />
       <Text color={card.isLive ? paneInk().ok : paneInk().muted} wrap="truncate-end">
         {card.isLive ? "✔" : "○"}
       </Text>
-      <Box width={nameCells} flexShrink={1} minWidth={0} marginRight={1}>
-        {labelButton(ui, {
-          key: card.name,
-          label: card.name,
-          isLight: !view.isDarkTheme,
-          onPress: () => view.select(card.name),
-        })}
+      <Box flexGrow={1} flexShrink={1} minWidth={0}>
+        {labelButton(ui, { key: card.name, label: card.name, onPress: toggle })}
       </Box>
       <Box width={detailCells} flexShrink={0} justifyContent="flex-end">
         <Text color={paneInk().muted} wrap="truncate-end">
@@ -156,26 +197,55 @@ function cardRows(
       </Box>
     </Box>,
   ];
-  if (!isSelected || card.actions.length === 0) return rows;
-  rows.push(
+  if (!isOpen) return rows;
+  if (card.actions.length > 0) {
+    rows.push(
+      <Box
+        key={`${card.name}-actions`}
+        flexDirection="row"
+        columnGap={2}
+        marginLeft={ACTIONS_INDENT_CELLS}
+        height={1}
+        overflow="hidden"
+      >
+        {card.actions.map((action) => (
+          <Button
+            key={`${card.name}-${action}`}
+            label={action}
+            plain
+            dimColor
+            onPress={() => view.act(action, card.name)}
+          />
+        ))}
+      </Box>,
+    );
+  }
+  return [...rows, ...toolRows(ui, card, view.width)];
+}
+
+function toolRows(ui: Ui, card: Card, width: number): RenderElement[] {
+  const { Box, Text } = ui;
+  const labels = card.tools.map((tool) => `${tool.uses} ${plural("use", tool.uses)}`);
+  const usesCells = Math.max(0, ...labels.map((label) => label.length));
+  return card.tools.map((tool, index) => (
     <Box
-      key={`${card.name}-actions`}
+      key={`${card.name}-tool-${tool.name}`}
       flexDirection="row"
-      columnGap={2}
-      marginLeft={ACTIONS_INDENT_CELLS}
+      width={width - ACTIONS_INDENT_CELLS}
       height={1}
-      overflow="hidden"
+      marginLeft={ACTIONS_INDENT_CELLS}
+      columnGap={1}
     >
-      {card.actions.map((action) => (
-        <Button
-          key={`${card.name}-${action}`}
-          label={action}
-          plain
-          dimColor
-          onPress={() => view.act(action, card.name)}
-        />
-      ))}
-    </Box>,
-  );
-  return rows;
+      <Box flexGrow={1} flexShrink={1} minWidth={0}>
+        <Text color={tool.uses > 0 ? paneInk().text : paneInk().muted} wrap="truncate-end">
+          {tool.name}
+        </Text>
+      </Box>
+      <Box width={usesCells} flexShrink={0} justifyContent="flex-end">
+        <Text color={paneInk().muted} wrap="truncate-end">
+          {labels[index]}
+        </Text>
+      </Box>
+    </Box>
+  ));
 }

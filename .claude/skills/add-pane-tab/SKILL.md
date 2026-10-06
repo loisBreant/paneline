@@ -14,6 +14,7 @@ Read `docs/architecture.md` (Side pane) and `docs/engine-limits.md` first. Use `
    - Export a view type, for example `SkillsView`, and a function `<name>Tab(ui: Ui, view: <Name>View): RenderElement`.
    - Take `Box`, `Text` and `Button` from `ui`. Use `paneRow` and the helpers from `pane-kit.tsx`. Colours are theme keys from `palette.ts` only.
    - Keep it a pure function of its view. No `$`, no reads.
+   - Follow `docs/pane-style.md` for headings, rows, spacing, colours and widths.
 5. Write `hooks/<name>-tab.tsx`. It exports two things:
    - `<NAME>_TAB = { id: "<name>", label: "<Label>" }`.
    - `register<Name>Tab(on: On)`. It registers a `ui.render` hook for `{ component: "Pane", requestId: tabRequestId(<NAME>_TAB.id) }` (from `pane-tab.ts`). The hook reads the data, calls `<name>Tab($.ui.resolve(e), view)` and returns the result. The shell has already set `e.props.bodyColumns`.

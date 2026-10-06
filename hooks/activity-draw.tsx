@@ -1,6 +1,7 @@
 import type { ElementTable, RenderElement } from "claude-code";
 
 import type { Activity, CallRecord, RunningCall } from "../types";
+import { headerWithClear } from "./clear-kit";
 import { formatDuration } from "./format";
 import {
   button,
@@ -30,6 +31,7 @@ export type ActivityView = {
   openCall: (id: string) => void;
   closeCall: () => void;
   isLightTheme: boolean;
+  clear: () => void;
 };
 
 type Row = { key: string; call: CallRecord };
@@ -61,19 +63,30 @@ function activityList(ui: Ui, view: ActivityView): RenderElement {
   return (
     <Box flexDirection="column">
       {chipLine(ui, view)}
-      {header(ui, "Now", paneHeaderLook(), view.width)}
+      <Box height={1} />
+      {nowHeader(ui, view)}
       {nowRow(ui, view)}
+      <Box height={1} />
       {header(ui, "Tool mix", paneHeaderLook(), view.width)}
       {mixBar(ui, view)}
       {mixLegend(ui, view)}
+      <Box height={1} />
       {header(ui, "Timeline", paneHeaderLook(), view.width)}
       {timeline.length === 0
         ? emptyLine(ui, "no calls yet")
         : timeline.map((row) => callRow(ui, row, view, toolCells))}
+      {failed.length === 0 ? null : <Box height={1} />}
       {failed.length === 0 ? null : header(ui, "Failed", paneHeaderLook(), view.width)}
       {failed.map((row) => callRow(ui, row, view, toolCells))}
     </Box>
   );
+}
+
+function nowHeader(ui: Ui, view: ActivityView): RenderElement {
+  const hasHistory = view.calls.length > 0 || view.activity.length > 0;
+  return hasHistory
+    ? headerWithClear(ui, "Now", view.width, view.clear)
+    : header(ui, "Now", paneHeaderLook(), view.width);
 }
 
 function chipLine({ Text }: Ui, view: ActivityView): RenderElement {
@@ -212,7 +225,6 @@ function callRow(ui: Ui, { key, call }: Row, view: ActivityView, toolCells: numb
         {labelButton(ui, {
           key,
           label,
-          isLight: view.isLightTheme,
           onPress: () => view.openCall(call.id),
         })}
       </Box>

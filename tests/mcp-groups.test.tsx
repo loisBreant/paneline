@@ -3,7 +3,8 @@ import type { On, SessionContextBreakdown } from "claude-code";
 import type { Engine, Mounted } from "claude-code/testing";
 
 import { palette } from "../hooks/palette";
-import { childrenOf, collect, textOf } from "./draw-tree";
+import { collect, textOf } from "./draw-tree";
+import { lines, serverEntriesOf } from "./mcp-tree";
 import type { Node } from "./draw-tree";
 
 type Pane = Mounted<"terminal", "Pane">;
@@ -13,8 +14,6 @@ const PANE_ROWS = 40;
 const NOW = 200_000;
 const SETTLE_TICKS = 5;
 const CWD = "/work";
-const MARKERS = ["❯", "›"];
-const TITLE = "Manage MCP servers";
 const HEADINGS = ["Project MCPs", "Local MCPs", "User MCPs", "claude.ai", "Built-in MCPs"];
 
 const SERVER_TOOLS = [
@@ -42,8 +41,6 @@ describe("mcp tab groups", () => {
     expect(await groupedLabels(pane)).toEqual([
       "Project MCPs",
       "proj-db",
-      "reconnect",
-      "disable",
       "proj-off",
       "Local MCPs",
       "local-notes",
@@ -65,10 +62,10 @@ describe("mcp tab groups", () => {
 
     const pane = await paneOnTab($);
 
-    expect(await groupedLabels(pane)).toEqual(["User MCPs", "user-docs", "reconnect", "disable"]);
+    expect(await groupedLabels(pane)).toEqual(["User MCPs", "user-docs"]);
   });
 
-  test("G3 a group heading is bold in the section colour", async ($, on) => {
+  test("G3 a group heading is bold in the plain text colour, not periwinkle", async ($, on) => {
     worldOf(on);
 
     const pane = await paneOnTab($);
@@ -79,7 +76,7 @@ describe("mcp tab groups", () => {
     expect(headings).toHaveLength(HEADINGS.length);
     for (const heading of headings) {
       expect(heading.props?.bold).toBe(true);
-      expect(heading.props?.color).toBe(palette.section);
+      expect(heading.props?.color).toBe(palette.text);
     }
   });
 
@@ -89,9 +86,11 @@ describe("mcp tab groups", () => {
     const pane = await paneOnTab($);
 
     const rules = collect((await pane.drawn()) as unknown as Node, "Text").filter(
-      (node) => textOf(node).startsWith("─") && node.props?.color === palette.rule,
+      (node) => textOf(node).trim().startsWith("─") && node.props?.color === palette.rule,
     );
-    const rowCells = rules.map((node, index) => textOf(node).length + HEADINGS[index]!.length + 1);
+    const rowCells = rules.map(
+      (node, index) => textOf(node).trim().length + HEADINGS[index]!.length + 1,
+    );
     expect(rowCells).toHaveLength(HEADINGS.length);
     expect(new Set(rowCells).size).toBe(1);
   });
@@ -158,18 +157,8 @@ async function paneOnTab($: Engine): Promise<Pane> {
 }
 
 async function groupedLabels(pane: Pane): Promise<string[]> {
-  const labels = inDrawOrder(await pane.drawn());
-  return labels.slice(labels.findIndex((label) => HEADINGS.includes(label)));
-}
-
-function inDrawOrder(node: Node): string[] {
-  if (node.type === "Button")
-    return MARKERS.includes(String(node.props?.label)) ? [] : [String(node.props?.label)];
-  if (node.type === "Text" && isListed(node)) return [textOf(node)];
-  return childrenOf(node).flatMap(inDrawOrder);
-}
-
-function isListed(text: Node): boolean {
-  const label = textOf(text);
-  return HEADINGS.includes(label) || (text.props?.bold === true && label !== TITLE);
+  const shown = await lines(pane);
+  return shown.flatMap((line) =>
+    HEADINGS.includes(line.text) ? [line.text] : serverEntriesOf([line]).map(([, name]) => name),
+  );
 }
