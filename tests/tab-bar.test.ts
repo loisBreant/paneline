@@ -24,8 +24,12 @@ describe("fitTabs", () => {
     expect(fitTabs(LABELS, 3, 20)).toEqual({ first: 2, last: 3, hasLeft: true, hasRight: false });
   });
 
-  test("T4 a middle tab keeps neighbours on both sides and both arrows show", () => {
-    expect(fitTabs(LABELS, 1, 17)).toEqual({ first: 1, last: 2, hasLeft: true, hasRight: true });
+  test("T4 a middle tab shows the page that holds it, not a window centred on it", () => {
+    expect(fitTabs(LABELS, 1, 17)).toEqual({ first: 0, last: 1, hasLeft: false, hasRight: true });
+  });
+
+  test("T6 a page with tabs on both sides shows both arrows", () => {
+    expect(fitTabs(LABELS, 1, 12)).toEqual({ first: 1, last: 1, hasLeft: true, hasRight: true });
   });
 
   test("T5 the active tab stays visible even when nothing else fits", () => {

@@ -17,6 +17,15 @@ import {
 import type { Place } from "./agents-place";
 import { directoryOf } from "./agents-place";
 import { PANE } from "./pane-tab";
+import {
+  afterAgentRequest,
+  BACKGROUND_OWNER,
+  emptySpend,
+  hasBaseline,
+  SPEND_SESSIONS_KEY,
+  withBaseline,
+  withSession,
+} from "./spend-model";
 import { forgetShownTab, isShownTab, justEntered } from "./shown-tab";
 import { folderName, isInside } from "./paths";
 import { targetOf } from "./tools";
@@ -30,6 +39,8 @@ const sessionUsdAtom = atom(
   { plugin: "paneline", key: "sessionUsd" } as const,
   null as number | null,
 );
+
+const spendAtom = atom({ plugin: "paneline", key: "spend" } as const, emptySpend());
 
 let tree: AgentTree = {};
 let seeding: Promise<void> | undefined;
@@ -78,6 +89,7 @@ export function trackAgents(on: On): void {
   });
 
   on("turn.step", { agentId: PRESENT_AGENT_ID }, async function* ($, e, next) {
+    const startedAt = await $.clock.now();
     const step = yield* next(e);
     const agentId = e.agentId;
     if (agentId === undefined) return step;
@@ -88,6 +100,23 @@ export function trackAgents(on: On): void {
         usage: step.usage,
       }),
     );
+    if (step.usage !== null) {
+      const request = {
+        agentId,
+        index: e.index,
+        usage: step.usage,
+        startedAt,
+        endedAt: await $.clock.now(),
+      };
+      const owner = tree[agentId]?.type ?? BACKGROUND_OWNER;
+      const state = await update($, spendAtom, (current) =>
+        afterAgentRequest(current, owner, request),
+      );
+      await $.store.set(
+        SPEND_SESSIONS_KEY,
+        withSession(await $.store.get(SPEND_SESSIONS_KEY), await $.session.id(), state),
+      );
+    }
     return step;
   });
 
@@ -116,6 +145,7 @@ export function trackAgents(on: On): void {
     if (usd !== lastUsd) {
       lastUsd = usd;
       await update($, sessionUsdAtom, () => usd);
+      if (usd !== null) await settleBaseline($, usd);
     }
     return next(e);
   });
@@ -220,4 +250,13 @@ function scheduleFlush($: EngineInterface): void {
     tree = pruned(tree);
     void update($, agentsAtom, () => tree);
   });
+}
+
+async function settleBaseline($: EngineInterface, usd: number): Promise<void> {
+  if (hasBaseline(await read($, spendAtom))) return;
+  const state = await update($, spendAtom, (current) => withBaseline(current, usd));
+  await $.store.set(
+    SPEND_SESSIONS_KEY,
+    withSession(await $.store.get(SPEND_SESSIONS_KEY), await $.session.id(), state),
+  );
 }

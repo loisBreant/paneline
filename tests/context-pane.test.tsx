@@ -240,7 +240,7 @@ describe("context tab grid size", () => {
 });
 
 describe("tab bar", () => {
-  test("T6 in a narrow pane arrows show the hidden tabs, and clicking one steps to the next or previous tab", async ($, on) => {
+  test("T6 in a narrow pane arrows show the hidden tabs, and clicking one moves to the next or previous page", async ($, on) => {
     worldOf(on);
 
     const pane = await mountPane($, TALL_PANE_ROWS, NARROW_COLUMNS);

@@ -5,7 +5,7 @@
 
 ![paneline in a Claude Code session](docs/screenshots/hero.png)
 
-paneline is a Claude Code mod (plugin) that adds a side pane with Activity, Files, Agents, Context, MCP and Skills tabs, a status line above the prompt, a restyled chat, terminal Mermaid diagrams, tables, code panels and diff panels. Colours follow your session `/color` and `/theme`.
+paneline is a Claude Code mod (plugin) that adds a side pane with Activity, Files, Agents, Context, MCP, Skills and Spend tabs, a status line above the prompt, a restyled chat, terminal Mermaid diagrams, tables, code panels and diff panels. Colours follow your session `/color` and `/theme`.
 
 ## Install
 
@@ -73,6 +73,10 @@ Third-party marketplaces do not update by themselves. Turn on auto-update in `/p
 ### Skills tab
 
 ![Skills tab](docs/screenshots/skills.png)
+
+### Spend tab
+
+![Spend tab](docs/screenshots/spend.png)
 
 ## Other ways to run
 

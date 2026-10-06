@@ -2,150 +2,302 @@ import { describe, expect, mock, test } from "claude-code/testing";
 import type { On } from "claude-code";
 import type { Engine } from "claude-code/testing";
 
-import { palette } from "../hooks/palette";
-import { ENGINE_DEFAULT_GREY, accentOf } from "../hooks/session-color";
-
-type Drawn = { type?: string; props?: Record<string, unknown>; children?: unknown[] };
+import { accentOf, ENGINE_DEFAULT_GREY } from "../hooks/session-color";
+import { colouredPieces, screenRows } from "./band-screen";
 
 const HOME = "/Users/dev";
 const PROJECT = `${HOME}/workspace/projects/paneline`;
 const TRANSCRIPT = "/tmp/session.jsonl";
 const SESSION_START = { cwd: PROJECT, surface: "terminal", isInteractive: true } as const;
-const PANE_TOGGLE = 5;
+const PANE_TOGGLE = " ".repeat(5);
 const GREY = ENGINE_DEFAULT_GREY;
 const RED = accentOf("red");
-const MUTED = palette.muted;
+const NOW = 1_800_000_000_000;
+const MINUTE_MS = 60_000;
+const HOUR_MS = 60 * MINUTE_MS;
+const DAY_MS = 24 * HOUR_MS;
+const WIDE = 200;
+const CHIPS = " opus 5.5  high  ~/workspace/projects/paneline ";
+const BAR_CELLS = /[▰▱]+/g;
+const COLUMN_TEXTS = /[≡◷▦][^≡◷▦]*?\d+%/g;
+const ANY_BAR = /[▰▱]/;
+const ANY_METER_CELL = /[≡◷▦▰▱%]/;
+const OLD_LOOK = /ctx|5h|7d|↺|[▁▂▃▄▅▆▇█]/;
+
+type Limit = { percentUsed: number; resetsInMs?: number };
+type Reading = { context?: number; five?: Limit; seven?: Limit };
+
+const FULL_BARS = "▰▰▰▰▱▰▰▰▰▱▱▱▱▰▰▰▰▰▱▱▱";
+const FULL_READING: Reading = {
+  context: 72,
+  five: { percentUsed: 48, resetsInMs: 2 * HOUR_MS },
+  seven: { percentUsed: 59, resetsInMs: 3 * DAY_MS },
+};
+const HIGH_BARS = "▰▰▰▰▰▰▰▰▰▰▰▰▱▰▰▰▰▰▰▰▰";
+const HIGH_READING: Reading = {
+  context: 95,
+  five: { percentUsed: 92, resetsInMs: 2 * HOUR_MS },
+  seven: { percentUsed: 97, resetsInMs: 3 * DAY_MS },
+};
 
 describe("the status row", () => {
-  test("R1 one blank row opens the band, chips sit at the left edge and the meters at the right edge of the last row", async ($, on) => {
-    const world = worldOf(on);
-    await $.session.start(SESSION_START);
-    await measure($, 10);
-    await $.classic.Stop({ stop_hook_active: false, effort: { level: "high" } });
-    await world.settle();
+  test("R1 two meter rows end at the right edge above the input, the chips stay on the row with the bars", async ($, on) => {
+    const rows = await bandOf($, on, FULL_READING, WIDE);
 
-    const rows = await bandRows($, 200);
-
-    expect(rows).toHaveLength(3);
+    expect(rows).toHaveLength(4);
     expect(rows[0]?.trim()).toBe("");
-    expect(rows[2]).toHaveLength(200);
-    expect(rows[2]?.startsWith(" opus 5.5  high  ~/workspace/projects/paneline ")).toBe(true);
-    expect(rows[2]?.endsWith("ctx ▁ 10%  5h ▂ 15%  7d ▁ 4%     ")).toBe(true);
+    expect(rows[2]).toHaveLength(WIDE);
+    expect(rows[2]?.endsWith(`≡ 72%   ◷ 2h 48%   ▦ 3d 59%${PANE_TOGGLE}`)).toBe(true);
+    expect(rows[3]).toHaveLength(WIDE);
+    expect(rows[3]?.startsWith(CHIPS)).toBe(true);
+    expect(rows[3]?.endsWith(`▰▰▰▰▱   ▰▰▰▰▱▱▱▱   ▰▰▰▰▰▱▱▱${PANE_TOGGLE}`)).toBe(true);
   });
 
-  test("R2 the gauge is one of eight bars chosen by percent", async ($, on) => {
-    const world = worldOf(on);
-    await $.session.start(SESSION_START);
-    await measure($, 62);
-    await world.settle();
-
-    expect((await bandRows($, 200))[2]?.endsWith("ctx ▅ 62%  5h ▂ 15%  7d ▁ 4%     ")).toBe(true);
-
-    await measure($, 100);
-    await world.settle();
-
-    expect((await bandRows($, 200))[2]).toContain("ctx █ 100%");
-  });
-
-  test("R3 at 72 columns the gauges go first and the path stays whole", async ($, on) => {
-    const world = worldOf(on);
-    await $.session.start(SESSION_START);
-    await measure($, 10);
-    await world.settle();
-
-    const row = (await bandRows($, 72))[2] as string;
-
-    expect(row).toHaveLength(72);
-    expect(row).not.toMatch(/[▁▂▃▄▅▆▇█]/);
-    expect(row).toContain(" ~/workspace/projects/paneline ");
-    expect(row.trimEnd().endsWith("ctx 10%  5h 15%  7d 4%")).toBe(true);
-  });
-
-  test("R4 at 60 columns the path is cut to its last segments and all three percents stay", async ($, on) => {
-    const world = worldOf(on);
-    await $.session.start(SESSION_START);
-    await measure($, 10);
-    await world.settle();
-
-    const row = (await bandRows($, 60))[2] as string;
-
-    expect(row).toHaveLength(60);
-    expect(row).toContain(" …/");
-    expect(row.trimEnd().endsWith("ctx 10%  5h 15%  7d 4%")).toBe(true);
-  });
-
-  test("R5 below that 7d is dropped first, then 5h, and the row never wraps", async ($, on) => {
-    const world = worldOf(on);
-    await $.session.start(SESSION_START);
-    await measure($, 10);
-    await world.settle();
-
-    const noWeek = (await bandRows($, 50))[2] as string;
-
-    expect(noWeek).toHaveLength(50);
-    expect(noWeek).toContain("5h 15%");
-    expect(noWeek).not.toContain("7d");
-
-    const contextOnly = (await bandRows($, 42))[2] as string;
-
-    expect(contextOnly).toContain("ctx 10%");
-    expect(contextOnly).not.toContain("5h");
-    expect(contextOnly.length).toBeLessThanOrEqual(42);
-  });
-
-  test("R5b the last segment is cut from its start when even it does not fit", async ($, on) => {
-    const world = worldOf(on, { cwd: `${HOME}/${"x".repeat(60)}` });
-    await $.session.start(SESSION_START);
-    await measure($, 10);
-    await world.settle();
-
-    const row = (await bandRows($, 56))[2] as string;
-
-    expect(row).toHaveLength(56);
-    expect(row).toContain("…xxx");
-    expect(row).toContain("ctx");
-  });
-
-  test("R6 by default gauges and percents are the grey accent and labels are muted", async ($, on) => {
-    const world = worldOf(on);
-    await $.session.start(SESSION_START);
-    await measure($, 10);
-    await world.settle();
-
-    const meters = await coloredMeterTexts($);
-    const colorsOf = (match: (text: string) => boolean) =>
-      meters.filter(({ text }) => match(text)).map(({ color }) => color);
-
-    expect(new Set(colorsOf((text) => /^[▁▂▃▄▅▆▇█] $/.test(text) || text.endsWith("%")))).toEqual(
-      new Set([GREY]),
+  test("R2 each bar starts under the first cell of its column and is as wide as the top text", async ($, on) => {
+    const rows = await bandOf(
+      $,
+      on,
+      {
+        context: 31,
+        five: { percentUsed: 90, resetsInMs: 45 * MINUTE_MS },
+        seven: { percentUsed: 12, resetsInMs: 6 * DAY_MS },
+      },
+      WIDE,
     );
-    expect(new Set(colorsOf((text) => /^(ctx|5h|7d) $/.test(text)))).toEqual(new Set([MUTED]));
+
+    const columns = [...(rows[2] ?? "").matchAll(COLUMN_TEXTS)];
+    const bars = [...(rows[3] ?? "").matchAll(BAR_CELLS)];
+
+    expect(bars.map((bar) => bar[0])).toEqual(["▰▰▱▱▱", "▰▰▰▰▰▰▰▰▱", "▰▱▱▱▱▱▱▱"]);
+    expect(bars.map((bar) => [bar.index, bar[0].length])).toEqual(
+      columns.map((column) => [column.index, column[0].length]),
+    );
   });
 
-  test("R7 after /color red the gauges and percents are red", async ($, on) => {
+  test("R3 a limit with no reset time shows no time and its bar is as wide as the shorter column", async ($, on) => {
+    const rows = await bandOf(
+      $,
+      on,
+      { context: 72, five: { percentUsed: 48 }, seven: { percentUsed: 59 } },
+      WIDE,
+    );
+
+    expect(rows[2]?.endsWith(`≡ 72%   ◷ 48%   ▦ 59%${PANE_TOGGLE}`)).toBe(true);
+    expect(rows[3]?.endsWith(`▰▰▰▰▱   ▰▰▱▱▱   ▰▰▰▱▱${PANE_TOGGLE}`)).toBe(true);
+  });
+
+  test("R4 a reset time shows the largest unit rounded down", async ($, on) => {
+    const rows = await bandOf(
+      $,
+      on,
+      {
+        context: 72,
+        five: { percentUsed: 48, resetsInMs: 2 * HOUR_MS + 59 * MINUTE_MS },
+        seven: { percentUsed: 59, resetsInMs: 3 * DAY_MS + 23 * HOUR_MS },
+      },
+      WIDE,
+    );
+
+    expect(rows[2]?.endsWith(`≡ 72%   ◷ 2h 48%   ▦ 3d 59%${PANE_TOGGLE}`)).toBe(true);
+  });
+
+  test("R5 a reset in 45 minutes shows 45m", async ($, on) => {
+    const rows = await bandOf(
+      $,
+      on,
+      { ...FULL_READING, five: { percentUsed: 48, resetsInMs: 45 * MINUTE_MS } },
+      WIDE,
+    );
+
+    expect(rows[2]?.endsWith(`≡ 72%   ◷ 45m 48%   ▦ 3d 59%${PANE_TOGGLE}`)).toBe(true);
+  });
+
+  test("R6 at the unit edges 60 minutes shows 1h and 24 hours shows 1d", async ($, on) => {
+    const rows = await bandOf(
+      $,
+      on,
+      {
+        context: 72,
+        five: { percentUsed: 48, resetsInMs: 60 * MINUTE_MS },
+        seven: { percentUsed: 59, resetsInMs: 24 * HOUR_MS },
+      },
+      WIDE,
+    );
+
+    expect(rows[2]?.endsWith(`≡ 72%   ◷ 1h 48%   ▦ 1d 59%${PANE_TOGGLE}`)).toBe(true);
+  });
+
+  test("R7 the old labels, the reset arrow and the one-character gauge are gone", async ($, on) => {
+    const rows = await bandOf($, on, FULL_READING, WIDE);
+
+    expect(rows.join("\n")).toContain("≡ 72%");
+    expect(rows.join("\n")).not.toMatch(OLD_LOOK);
+  });
+
+  test("R8 by default every piece of the meter block is the grey accent", async ($, on) => {
+    const world = worldOf(on);
+    await startWith($, world, FULL_READING);
+
+    const shown = await meterPieces($);
+
+    expect(shown.map(({ text }) => text).join("")).toContain("≡ 72%");
+    expect(shown.map(({ text }) => text).join("")).toContain("◷ 2h 48%");
+    expect(shown.map(({ text }) => text).join("")).toContain("▦ 3d 59%");
+    expect(barsOf(shown)).toBe(FULL_BARS);
+    expect(new Set(shown.map(({ color }) => color))).toEqual(new Set([GREY]));
+  });
+
+  test("R9 after /color red every piece of the meter block is red", async ($, on) => {
     const world = worldOf(on, { colorEntries: ["red"] });
-    await $.session.start(SESSION_START);
-    await measure($, 10);
-    await $.classic.Stop({
-      stop_hook_active: false,
-      effort: { level: "high" },
-      transcript_path: TRANSCRIPT,
-    });
-    await world.settle();
+    await startWith($, world, FULL_READING, TRANSCRIPT);
 
-    const colors = (await coloredMeterTexts($))
-      .filter(({ text }) => /^[▁▂▃▄▅▆▇█] $/.test(text) || text.endsWith("%"))
-      .map(({ color }) => color);
+    const shown = await meterPieces($);
 
-    expect(colors.length).toBeGreaterThan(0);
-    expect(colors.every((color) => color === RED)).toBe(true);
+    expect(shown.map(({ text }) => text).join("")).toContain("≡ 72%");
+    expect(shown.map(({ text }) => text).join("")).toContain("◷ 2h 48%");
+    expect(shown.map(({ text }) => text).join("")).toContain("▦ 3d 59%");
+    expect(barsOf(shown)).toBe(FULL_BARS);
+    expect(new Set(shown.map(({ color }) => color))).toEqual(new Set([RED]));
+  });
+
+  test("R19 after /color red at 90% and above the whole meter block stays red", async ($, on) => {
+    const world = worldOf(on, { colorEntries: ["red"] });
+    await startWith($, world, HIGH_READING, TRANSCRIPT);
+
+    const shown = await meterPieces($);
+
+    expect(shown.map(({ text }) => text).join("")).toContain("≡ 95%");
+    expect(shown.map(({ text }) => text).join("")).toContain("◷ 2h 92%");
+    expect(shown.map(({ text }) => text).join("")).toContain("▦ 3d 97%");
+    expect(barsOf(shown)).toBe(HIGH_BARS);
+    expect(new Set(shown.map(({ color }) => color))).toEqual(new Set([RED]));
+  });
+
+  test("R20 by default at 90% and above the whole meter block stays grey", async ($, on) => {
+    const world = worldOf(on);
+    await startWith($, world, HIGH_READING);
+
+    const shown = await meterPieces($);
+
+    expect(shown.map(({ text }) => text).join("")).toContain("≡ 95%");
+    expect(shown.map(({ text }) => text).join("")).toContain("◷ 2h 92%");
+    expect(shown.map(({ text }) => text).join("")).toContain("▦ 3d 97%");
+    expect(barsOf(shown)).toBe(HIGH_BARS);
+    expect(new Set(shown.map(({ color }) => color))).toEqual(new Set([GREY]));
+  });
+
+  test("R10 at 0% the context bar has no filled cell", async ($, on) => {
+    const rows = await bandOf($, on, { ...FULL_READING, context: 0 }, WIDE);
+
+    expect(firstBar(rows)).toMatch(/^▱{4,5}$/);
+  });
+
+  test("R11 at 100% the context bar has no empty cell", async ($, on) => {
+    const rows = await bandOf($, on, { ...FULL_READING, context: 100 }, WIDE);
+
+    expect(firstBar(rows)).toMatch(/^▰{5,6}$/);
+  });
+
+  test("R12 at 50% the context bar shows three filled cells of five", async ($, on) => {
+    const rows = await bandOf($, on, { ...FULL_READING, context: 50 }, WIDE);
+
+    expect(firstBar(rows)).toBe("▰▰▰▱▱");
+  });
+
+  test("R13 at 85% the context bar shows four filled cells of five", async ($, on) => {
+    const rows = await bandOf($, on, { ...FULL_READING, context: 85 }, WIDE);
+
+    expect(firstBar(rows)).toBe("▰▰▰▰▱");
+  });
+
+  test("R14 with only the context known the block is one column", async ($, on) => {
+    const rows = await bandOf($, on, { context: 72 }, WIDE);
+
+    expect(rows).toHaveLength(4);
+    expect(rows[2]?.endsWith(`≡ 72%${PANE_TOGGLE}`)).toBe(true);
+    expect(rows[3]?.endsWith(`▰▰▰▰▱${PANE_TOGGLE}`)).toBe(true);
+    expect(rows.join("\n")).not.toMatch(/[◷▦]/);
+  });
+
+  test("R15 with only limits known the block is the two limit columns", async ($, on) => {
+    const rows = await bandOf($, on, { five: FULL_READING.five, seven: FULL_READING.seven }, WIDE);
+
+    expect(rows[2]?.endsWith(`◷ 2h 48%   ▦ 3d 59%${PANE_TOGGLE}`)).toBe(true);
+    expect(rows[3]?.endsWith(`▰▰▰▰▱▱▱▱   ▰▰▰▰▰▱▱▱${PANE_TOGGLE}`)).toBe(true);
+    expect(rows.join("\n")).not.toContain("≡");
+  });
+
+  test("R16 at 76 columns no bar is drawn and the context and 5h percents stay", async ($, on) => {
+    const rows = await bandOf($, on, FULL_READING, 76);
+
+    expect(rows.join("\n")).not.toMatch(ANY_BAR);
+    expect(rows.join("\n")).toMatch(/≡ 72%\s+◷ 2h 48%/);
+  });
+
+  test("R17 at 28 columns the 7d column is gone, the context percent stays and no bar is drawn", async ($, on) => {
+    const rows = await bandOf($, on, FULL_READING, 28);
+
+    expect(rows.join("\n")).toContain("≡ 72%");
+    expect(rows.join("\n")).not.toContain("▦");
+    expect(rows.join("\n")).not.toMatch(ANY_BAR);
+  });
+
+  test("R18 a folder name longer than the row is cut from its start and the context percent still shows", async ($, on) => {
+    const rows = await bandOf($, on, FULL_READING, 56, { cwd: `${HOME}/${"x".repeat(60)}` });
+
+    expect(Math.max(...rows.map((row) => row.length))).toBe(56);
+    expect(rows.join("\n")).toContain("…xxx");
+    expect(rows.join("\n")).toContain("≡ 72%");
   });
 });
+
+async function bandOf(
+  $: Engine,
+  on: On,
+  reading: Reading,
+  columns: number,
+  options: WorldOptions = {},
+): Promise<string[]> {
+  const world = worldOf(on, options);
+  await startWith($, world, reading);
+  return screenRows(await mountBand($, columns), columns);
+}
+
+async function startWith(
+  $: Engine,
+  world: { settle: () => Promise<void> },
+  reading: Reading,
+  transcriptPath?: string,
+) {
+  await $.session.start(SESSION_START);
+  await measure($, reading);
+  await $.classic.Stop({
+    stop_hook_active: false,
+    effort: { level: "high" },
+    ...(transcriptPath === undefined ? {} : { transcript_path: transcriptPath }),
+  });
+  await world.settle();
+}
+
+function barsOf(pieces: { text: string }[]): string {
+  return pieces
+    .filter(({ text }) => ANY_BAR.test(text))
+    .map(({ text }) => text)
+    .join("");
+}
+
+function firstBar(rows: string[]): string {
+  return (rows.at(-1) ?? "").match(BAR_CELLS)?.[0] ?? "";
+}
+
+async function meterPieces($: Engine): Promise<{ text: string; color: unknown }[]> {
+  return colouredPieces(await mountBand($, WIDE)).filter(({ text }) => ANY_METER_CELL.test(text));
+}
 
 type WorldOptions = { cwd?: string; engineRow?: string; colorEntries?: string[] };
 
 function worldOf(on: On, options: WorldOptions = {}) {
-  const clock = mock.clock(on);
+  const clock = mock.clock(on, { now: NOW });
   const cwd = options.cwd ?? PROJECT;
   const engineRow = options.engineRow ?? "engine row";
   const colorEntries = options.colorEntries ?? [];
@@ -188,13 +340,25 @@ function worldOf(on: On, options: WorldOptions = {}) {
   return { settle: () => clock.settle() };
 }
 
-function measure($: Engine, contextPercent: number) {
+function measure($: Engine, reading: Reading) {
+  const limit = (kind: string, value: Limit | undefined) =>
+    value === undefined
+      ? []
+      : [
+          {
+            kind,
+            percentUsed: value.percentUsed,
+            ...(value.resetsInMs === undefined
+              ? {}
+              : { resetsAt: new Date(NOW + value.resetsInMs).toISOString() }),
+          },
+        ];
   return $.session.measure({
-    context: { window: 200_000, percent: contextPercent },
-    rateLimits: [
-      { kind: "five_hour", percentUsed: 15 },
-      { kind: "seven_day", percentUsed: 4 },
-    ],
+    context:
+      reading.context === undefined
+        ? { window: 200_000 }
+        : { window: 200_000, percent: reading.context },
+    rateLimits: [...limit("five_hour", reading.five), ...limit("seven_day", reading.seven)],
     changed: ["context", "rateLimits"],
   });
 }
@@ -214,44 +378,5 @@ async function mountBand($: Engine, columns: number) {
     },
     viewport: { columns, rows: 40 },
   });
-  return (await band.drawn()) as Drawn;
-}
-
-async function bandRows($: Engine, columns: number): Promise<string[]> {
-  const rows = ((await mountBand($, columns)).children ?? []).filter(
-    (row) => row !== null && row !== false,
-  );
-  return rows.map((row) => rowText(row, columns));
-}
-
-function rowText(row: unknown, columns: number): string {
-  const drawn = row as Drawn;
-  if (drawn.type !== "Box") return shownText(row);
-  const [left, right] = drawn.children ?? [];
-  const leftText = shownText(left);
-  const rightText = ((right as Drawn | undefined)?.children ?? [])
-    .map(shownText)
-    .join(" ".repeat(2));
-  return `${leftText}${" ".repeat(Math.max(columns - PANE_TOGGLE - leftText.length - rightText.length, 0))}${rightText}${" ".repeat(PANE_TOGGLE)}`;
-}
-
-async function coloredMeterTexts($: Engine): Promise<{ text: string; color: unknown }[]> {
-  const row = ((await mountBand($, 200)).children ?? []).at(-1) as Drawn;
-  const right = (row.children ?? []).at(-1) as Drawn;
-  return coloredTexts(right).map((node) => ({ text: shownText(node), color: node.props?.color }));
-}
-
-function coloredTexts(node: unknown): Drawn[] {
-  const drawn = node as Drawn;
-  if (drawn.props?.color !== undefined) return [drawn];
-  return (drawn.children ?? []).flatMap((child) =>
-    typeof child === "string" ? [] : coloredTexts(child),
-  );
-}
-
-function shownText(node: unknown): string {
-  if (typeof node === "string") return node;
-  if (Array.isArray(node)) return node.map(shownText).join("");
-  const children = (node as { children?: unknown[] } | undefined)?.children ?? [];
-  return children.map(shownText).join("");
+  return band.drawn();
 }

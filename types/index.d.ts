@@ -18,7 +18,10 @@ export type RunningCall = { callId: string; tool: string; target: string };
 
 export type TurnStats = { reads: number; commands: number; changedFiles: number };
 
-export type UsageSnap = { context: number | null; limits: { label: string; percent: number }[] };
+export type UsageSnap = {
+  context: number | null;
+  limits: { label: string; percent: number; resetsAt?: string }[];
+};
 
 export type PromptInfo = { model: string; effort: string | null; cwd: string };
 
@@ -45,6 +48,31 @@ export type AgentNode = {
 };
 
 export type AgentTree = Record<string, AgentNode>;
+
+export type SpendOwner = { weight: number; pricedTokens: number; unpricedTokens: number };
+
+export type SpendMiss = { at: number; cause: string; rebuilt: number; usd: number | null };
+
+export type SpendRent = { tool: string; target: string; tokens: number };
+
+export type SpendMemory = { model: string; endedAt: number; size: number | undefined };
+
+export type SpendState = {
+  owners: Record<string, SpendOwner>;
+  mainModel: string;
+  cacheReadTokens: number;
+  promptTokens: number;
+  missCount: number;
+  lostUsd: number;
+  misses: SpendMiss[];
+  rentTokens: number;
+  rent: SpendRent[];
+  isCompacted: boolean;
+  mainCacheTtl: "5m" | "1h" | null;
+  baselineUsd: number | null;
+  mainMemory: SpendMemory | null;
+  agentMemories: Record<string, SpendMemory>;
+};
 
 declare module "claude-code" {
   interface PluginState {
@@ -75,6 +103,7 @@ declare module "claude-code" {
       skillsExpanded: string[];
       agents: Record<string, AgentNode>;
       sessionUsd: number | null;
+      spend: SpendState;
       promptInfo: PromptInfo;
       sessionColor: string;
       theme: string;

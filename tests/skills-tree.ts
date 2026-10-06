@@ -1,7 +1,7 @@
 import { childrenOf, textOf } from "./draw-tree";
 import type { Node } from "./draw-tree";
 
-export type Line = { text: string; indent: number; parts: Node[] };
+export type Line = { text: string; indent: number; parts: Node[]; edge?: number };
 export type Block = { title: string; count: string | null; heading: Line; rows: Line[] };
 
 const RULE_CHARS = /─+/g;
@@ -118,7 +118,7 @@ function layout(node: Node, inherited: number): Line[] {
   const children = childrenOf(node);
   if (children.length === 0) return spacerLines(node, indent);
   const columns = children.map((child) => layout(child, indent));
-  return isRow(node) ? mergeRow(columns, gapOf(node)) : columns.flat();
+  return isRow(node) ? mergeRow(columns, gapOf(node), edgeOf(node, indent)) : columns.flat();
 }
 
 function leavesOf(node: Node): Node[] {
@@ -134,12 +134,17 @@ function isRow(node: Node): boolean {
   return direction === undefined || direction === "row" || direction === "row-reverse";
 }
 
+function edgeOf(node: Node, indent: number): number | undefined {
+  const width = node.props?.width;
+  return typeof width === "number" ? indent + width : undefined;
+}
+
 function gapOf(node: Node): number {
   const gap = node.props?.columnGap;
   return typeof gap === "number" ? gap : 0;
 }
 
-function mergeRow(columns: Line[][], gap: number): Line[] {
+function mergeRow(columns: Line[][], gap: number, edge: number | undefined): Line[] {
   const height = Math.max(0, ...columns.map((column) => column.length));
   return Array.from({ length: height }, (_, index) => {
     const pieces = columns.flatMap((column) => column[index] ?? []);
@@ -150,6 +155,7 @@ function mergeRow(columns: Line[][], gap: number): Line[] {
         .join(" "),
       indent: leadingIndent(pieces, gap),
       parts: pieces.flatMap((piece) => piece.parts),
+      ...(edge === undefined ? {} : { edge }),
     };
   });
 }

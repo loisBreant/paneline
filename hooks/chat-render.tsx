@@ -237,14 +237,15 @@ export function renderChat(on: On): void {
 
   on("ui.render", { component: "AbovePrompt" }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e);
-    const [theirs, usage, info, home, color] = await Promise.all([
+    const [theirs, usage, info, home, color, nowMs] = await Promise.all([
       next(e),
       read($, usageAtom),
       read($, promptInfoAtom),
       $.env.get("HOME"),
       read($, sessionColorAtom),
+      $.clock.now(),
     ]);
-    const meters = metersOf(usage);
+    const meters = metersOf(usage, nowMs);
     const ui = $.ui.resolve(e);
     const { Box } = ui;
     return (

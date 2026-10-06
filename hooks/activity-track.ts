@@ -1,8 +1,22 @@
 import { atom, memberOf, update } from "claude-code";
-import type { EngineInterface, On, ToolCallInput, ToolCallResult } from "claude-code";
+import type {
+  EngineInterface,
+  On,
+  ToolCallInput,
+  ToolCallResult,
+  TurnCompleteInput,
+} from "claude-code";
 
 import type { Activity, AgentEdit, CallRecord, RunningCall, TurnStats } from "../types";
 import { callRecord } from "./activity-calls";
+import {
+  afterMainTurn,
+  emptySpend,
+  rentRowOf,
+  SPEND_SESSIONS_KEY,
+  withRent,
+  withSession,
+} from "./spend-model";
 import { isEditTool, targetOf } from "./tools";
 
 const KEPT_CALLS = 50;
@@ -17,6 +31,8 @@ const callsAtom = atom({ plugin: "paneline", key: "calls" } as const, [] as Call
 const runningAtom = atom({ plugin: "paneline", key: "running" } as const, [] as RunningCall[]);
 const toolMsAtom = atom({ plugin: "paneline", key: "toolMs" } as const, UNMEASURED_MS);
 const turnStatsAtom = atom({ plugin: "paneline", key: "turnStats" } as const, null);
+
+const spendAtom = atom({ plugin: "paneline", key: "spend" } as const, emptySpend());
 
 let turnActivity: Activity[] = [];
 
@@ -36,7 +52,7 @@ export function trackActivity(on: On): void {
     await Promise.all([
       recorded,
       e.agentId === undefined
-        ? recordMainCall($, e.tool_use_id, entry)
+        ? Promise.all([recordMainCall($, e.tool_use_id, entry), recordRent($, e, ran)])
         : recordAgentCall($, e.agentId, entry),
     ]);
     return ran;
@@ -47,8 +63,39 @@ export function trackActivity(on: On): void {
     const stats = turnStats(turnActivity);
     await update($, memberOf(turnStatsAtom, { requestId: String(e.durationMs) }), () => stats);
     await update($, totalMsAtom, (total) => total + e.durationMs);
+    await recordMainSpend($, e);
     return next(e);
   });
+}
+
+async function recordRent(
+  $: EngineInterface,
+  e: ToolCallInput,
+  ran: ToolCallResult,
+): Promise<void> {
+  if (ran.text === undefined) return;
+  const row = rentRowOf(
+    { tool: e.tool, target: targetOf(e), cwd: await $.session.cwd() },
+    ran.text,
+  );
+  await update($, spendAtom, (state) => withRent(state, row));
+}
+
+async function recordMainSpend($: EngineInterface, e: TurnCompleteInput): Promise<void> {
+  if (e.usage === undefined) return;
+  const [endedAt, usage] = await Promise.all([$.clock.now(), $.session.usage()]);
+  const turn = {
+    usage: e.usage,
+    context: usage.context.tokens,
+    startedAt: endedAt - e.durationMs,
+    endedAt,
+    fallbackTtl: usage.rateLimits.length > 0 ? "1h" : "5m",
+  } as const;
+  const state = await update($, spendAtom, (current) => afterMainTurn(current, turn));
+  await $.store.set(
+    SPEND_SESSIONS_KEY,
+    withSession(await $.store.get(SPEND_SESSIONS_KEY), await $.session.id(), state),
+  );
 }
 
 function runningMainCall(

@@ -87,10 +87,8 @@ describe("usage meters", () => {
 
     expect(world.writes.filter((key) => key === "usage")).toHaveLength(1);
     const shown = shownText(await band.drawn());
-    expect(shown).toContain("ctx");
-    expect(shown).toContain("42%");
-    expect(shown).toContain("5h");
-    expect(shown).toContain("17%");
+    expect(shown).toContain("≡ 42%");
+    expect(shown).toContain("◷ 17%");
   });
 
   test("S5 a measure with new figures changes the band", async ($, on) => {
@@ -124,7 +122,7 @@ describe("usage meters", () => {
     await $.session.measure({ context: { window: 200_000 }, rateLimits: [], changed: ["context"] });
 
     const shown = shownText(await band.drawn());
-    expect(shown).not.toContain("ctx");
+    expect(shown).not.toContain("≡");
     expect(shown).not.toContain("%");
   });
 });

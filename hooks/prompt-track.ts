@@ -2,6 +2,7 @@ import { atom, read, update } from "claude-code";
 import type { EngineInterface, On } from "claude-code";
 
 import type { PromptInfo } from "../types";
+import { emptySpend } from "./spend-model";
 
 const COLOR_ENTRY = '"type":"agent-color"';
 
@@ -9,6 +10,7 @@ const promptInfoAtom = atom(
   { plugin: "paneline", key: "promptInfo" } as const,
   { model: "", effort: null, cwd: "" } as PromptInfo,
 );
+const spendAtom = atom({ plugin: "paneline", key: "spend" } as const, emptySpend());
 const sessionColorAtom = atom({ plugin: "paneline", key: "sessionColor" } as const, "default");
 const transcriptPathAtom = atom({ plugin: "paneline", key: "transcriptPath" } as const, "");
 
@@ -41,6 +43,7 @@ export function trackPromptInfo(on: On): void {
 
   on("classic.PostModelSwitch", async ($, e, next) => {
     await change($, { model: e.to_model });
+    await update($, spendAtom, (state) => ({ ...state, mainCacheTtl: e.cache_ttl }));
     return next(e);
   });
 

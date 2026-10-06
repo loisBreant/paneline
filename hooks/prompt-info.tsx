@@ -2,7 +2,6 @@ import type { ElementTable, RenderElement } from "claude-code";
 
 import type { PromptInfo, UsageSnap } from "../types";
 import { shortModel } from "./format";
-import { palette } from "./palette";
 import { tildePath } from "./paths";
 import { accentOf, chipColors } from "./session-color";
 
@@ -10,25 +9,43 @@ const MIN_PATH_COLUMNS = 8;
 const MIN_PATH_COLUMNS_BEFORE_DROP = 12;
 const CHIP_PADDING = 2;
 const PANE_TOGGLE_COLUMNS = 5;
-const GAUGE_LEVELS = "▁▂▃▄▅▆▇█";
-const METER_GAP = 2;
+const PERCENT_SCALE = 100;
+const FILLED_CELL = "▰";
+const EMPTY_CELL = "▱";
+const COLUMN_GAP = "   ";
 const ROW_GAP = 2;
+const MS_PER_MINUTE = 60_000;
+const MINUTES_PER_HOUR = 60;
+const HOURS_PER_DAY = 24;
+const SYMBOLS: Record<string, string> = { ctx: "≡", "5h": "◷", "7d": "▦" };
 const DROP_STEPS = [[], ["7d"], ["7d", "5h"]];
-const NO_METERS: MeterLayout = { meters: [], withGauges: false, shortensPath: false };
+const NO_METERS: MeterLayout = { meters: [], withBars: false, shortensPath: false };
 
-type Meter = { label: string; percent: number };
+type Meter = { label: string; symbol: string; percent: number; reset: string | null };
 
-export function metersOf(usage: UsageSnap): Meter[] {
+export function metersOf(usage: UsageSnap, nowMs: number): Meter[] {
   return [
     ...(usage.context === null ? [] : [{ label: "ctx", percent: usage.context }]),
     ...usage.limits,
   ].map((meter) => ({
     label: meter.label,
+    symbol: SYMBOLS[meter.label] ?? meter.label,
     percent: Math.max(0, Math.min(100, Math.round(meter.percent))),
+    reset: "resetsAt" in meter ? resetIn(meter.resetsAt, nowMs) : null,
   }));
 }
 
-type MeterLayout = { meters: Meter[]; withGauges: boolean; shortensPath: boolean };
+function resetIn(resetsAt: string | undefined, nowMs: number): string | null {
+  if (resetsAt === undefined) return null;
+  const minutes = Math.floor((Date.parse(resetsAt) - nowMs) / MS_PER_MINUTE);
+  if (Number.isNaN(minutes) || minutes < 0) return null;
+  if (minutes < MINUTES_PER_HOUR) return `${minutes}m`;
+  const hours = Math.floor(minutes / MINUTES_PER_HOUR);
+  if (hours < HOURS_PER_DAY) return `${hours}h`;
+  return `${Math.floor(hours / HOURS_PER_DAY)}d`;
+}
+
+type MeterLayout = { meters: Meter[]; withBars: boolean; shortensPath: boolean };
 
 export function promptInfoRow(
   ui: ElementTable,
@@ -48,7 +65,12 @@ export function promptInfoRow(
   const { background, text } = chipColors(colorName);
   const labels = [...lead, shortenPath(path, room)];
   return (
-    <Box width={totalColumns} paddingRight={PANE_TOGGLE_COLUMNS} justifyContent="space-between">
+    <Box
+      width={totalColumns}
+      paddingRight={PANE_TOGGLE_COLUMNS}
+      justifyContent="space-between"
+      alignItems="flex-end"
+    >
       <Text wrap="truncate-end">
         {labels.map((label) => (
           <Text key={label} color={text} backgroundColor={background}>{` ${label} `}</Text>
@@ -61,26 +83,43 @@ export function promptInfoRow(
 
 function meterText(
   { Box, Text }: ElementTable,
-  { meters, withGauges }: MeterLayout,
+  { meters, withBars }: MeterLayout,
   accent: string,
 ): RenderElement {
   return (
-    <Box flexShrink={0} columnGap={METER_GAP}>
-      {meters.map((meter) => (
-        <Text key={meter.label} wrap="truncate-end">
-          <Text color={palette.muted}>{`${meter.label} `}</Text>
-          {withGauges ? <Text color={accent}>{`${gaugeOf(meter.percent)} `}</Text> : null}
-          <Text bold color={accent}>{`${meter.percent}%`}</Text>
+    <Box flexShrink={0} flexDirection="column">
+      <Text wrap="truncate-end">
+        {meters.map((meter, index) => (
+          <Text key={meter.label}>
+            {index === 0 ? "" : COLUMN_GAP}
+            <Text
+              color={accent}
+            >{`${meter.symbol} ${meter.reset === null ? "" : `${meter.reset} `}`}</Text>
+            <Text bold color={accent}>{`${meter.percent}%`}</Text>
+          </Text>
+        ))}
+      </Text>
+      {withBars ? (
+        <Text wrap="truncate-end">
+          {meters.map((meter, index) => (
+            <Text key={meter.label}>
+              {index === 0 ? "" : COLUMN_GAP}
+              <Text color={accent}>{barOf(meter.percent, topTextOf(meter).length)}</Text>
+            </Text>
+          ))}
         </Text>
-      ))}
+      ) : null}
     </Box>
   );
 }
 
-function gaugeOf(percent: number): string {
-  return GAUGE_LEVELS[
-    Math.min(GAUGE_LEVELS.length - 1, Math.floor((percent / 100) * GAUGE_LEVELS.length))
-  ] as string;
+function topTextOf({ symbol, reset, percent }: Meter): string {
+  return `${symbol} ${reset === null ? "" : `${reset} `}${percent}%`;
+}
+
+function barOf(percent: number, cells: number): string {
+  const filled = Math.round((percent / PERCENT_SCALE) * cells);
+  return FILLED_CELL.repeat(filled) + EMPTY_CELL.repeat(cells - filled);
 }
 
 function fittingLayout(
@@ -101,11 +140,11 @@ function fittingLayout(
 function layoutsOf(meters: Meter[]): MeterLayout[] {
   if (meters.length === 0) return [];
   return [
-    { meters, withGauges: true, shortensPath: false },
-    { meters, withGauges: false, shortensPath: false },
+    { meters, withBars: true, shortensPath: false },
+    { meters, withBars: false, shortensPath: false },
     ...DROP_STEPS.map((dropped) => ({
       meters: meters.filter((meter) => !dropped.includes(meter.label)),
-      withGauges: false,
+      withBars: false,
       shortensPath: true,
     })),
   ];
@@ -115,11 +154,9 @@ function rightWidth(layout: MeterLayout): number {
   return layout.meters.length === 0 ? 0 : ROW_GAP + metersWidth(layout);
 }
 
-function metersWidth({ meters, withGauges }: MeterLayout): number {
-  const segments = meters.map(
-    (meter) => meter.label.length + 1 + (withGauges ? 2 : 0) + `${meter.percent}%`.length,
-  );
-  return segments.reduce((sum, width) => sum + width, 0) + METER_GAP * (segments.length - 1);
+function metersWidth({ meters }: MeterLayout): number {
+  const widths = meters.map((meter) => topTextOf(meter).length);
+  return widths.reduce((sum, width) => sum + width, 0) + COLUMN_GAP.length * (widths.length - 1);
 }
 
 function shortenPath(path: string, room: number): string {

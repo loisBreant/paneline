@@ -12,23 +12,28 @@ const ARROW_CELLS = 2;
 
 type TabWindow = { first: number; last: number; hasLeft: boolean; hasRight: boolean };
 
-export function fitTabs(labels: string[], active: number, width: number): TabWindow {
+const NO_TABS_WINDOW: TabWindow = { first: 0, last: -1, hasLeft: false, hasRight: false };
+
+export function tabPages(labels: string[], width: number): TabWindow[] {
   const cost = (first: number, last: number): number =>
     labels.slice(first, last + 1).reduce((sum, label) => sum + label.length, 0) +
     (last - first) * TAB_GAP +
     (first > 0 ? ARROW_CELLS : 0) +
     (last < labels.length - 1 ? ARROW_CELLS : 0);
-  let first = active;
-  let last = active;
-  let isGrowing = true;
-  while (isGrowing) {
-    const growsRight = last + 1 < labels.length && cost(first, last + 1) <= width;
-    if (growsRight) last++;
-    const growsLeft = first > 0 && cost(first - 1, last) <= width;
-    if (growsLeft) first--;
-    isGrowing = growsRight || growsLeft;
+  const pages: TabWindow[] = [];
+  let first = 0;
+  while (first < labels.length) {
+    let last = first;
+    while (last + 1 < labels.length && cost(first, last + 1) <= width) last++;
+    pages.push({ first, last, hasLeft: first > 0, hasRight: last < labels.length - 1 });
+    first = last + 1;
   }
-  return { first, last, hasLeft: first > 0, hasRight: last < labels.length - 1 };
+  return pages;
+}
+
+export function fitTabs(labels: string[], active: number, width: number): TabWindow {
+  const pages = tabPages(labels, width);
+  return pages.find(({ last }) => active <= last) ?? NO_TABS_WINDOW;
 }
 
 export function tabBar(
@@ -41,7 +46,9 @@ export function tabBar(
 ): RenderElement {
   const labels = tabs.map(({ label }) => ` ${label} `);
   const activeIndex = tabs.findIndex(({ id }) => id === active);
+  const pages = tabPages(labels, width);
   const view = fitTabs(labels, activeIndex, width);
+  const viewIndex = pages.findIndex(({ first }) => first === view.first);
   const arrow = (key: string, glyph: string, offset: number): RenderElement => (
     <Button
       key={key}
@@ -49,7 +56,7 @@ export function tabBar(
       plain
       dimColor
       onPress={() => {
-        const target = tabs[activeIndex + offset];
+        const target = tabs[pages[viewIndex + offset]?.first ?? -1];
         if (target) showTab(target.id);
       }}
     />

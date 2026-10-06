@@ -48,6 +48,7 @@ async function storeUsage($: EngineInterface, measure: Measure): Promise<void> {
     limits: measure.rateLimits.map((limit) => ({
       label: limitLabel(limit.kind),
       percent: limit.percentUsed,
+      ...(limit.resetsAt === undefined ? {} : { resetsAt: limit.resetsAt }),
     })),
   };
   if (JSON.stringify(stored) === JSON.stringify(snap)) return;

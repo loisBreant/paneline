@@ -9,6 +9,7 @@ import { registerProbe } from "./probe";
 import { trackPromptInfo } from "./prompt-track";
 import { registerSessionCommand, registerSessionPane } from "./session-pane";
 import { trackSkills } from "./skills-track";
+import { trackSpend } from "./spend-track";
 import { registerTabs } from "./tabs";
 import { trackTheme } from "./theme-track";
 import { trackUsage } from "./usage-track";
@@ -24,6 +25,7 @@ export const register: Register = (on, options) => {
   trackTheme(on);
   trackSkills(on);
   trackMcpUses(on);
+  trackSpend(on);
   registerTabs(on);
   registerSessionCommand(on);
   renderChat(on);
