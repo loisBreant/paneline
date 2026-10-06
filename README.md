@@ -20,59 +20,59 @@ Third-party marketplaces do not update by themselves. Turn on auto-update in `/p
 
 ## How it looks
 
+### Status row
+
 ![Status row](docs/screenshots/statusrow.png)
 
-Status row
+### Green, purple and orange sessions
 
 ![Session colour green](docs/screenshots/color-green.png)
 ![Session colour purple](docs/screenshots/color-purple.png)
 ![Session colour orange](docs/screenshots/color-orange.png)
 
-Green, purple and orange sessions
+### Chat
 
 ![Chat layout](docs/screenshots/chat.png)
 
-Chat
+### Tables, alerts and code panels
 
 ![Tables, alerts and a code panel](docs/screenshots/visuals.png)
 
-Tables, alerts and code panels
+### Mermaid diagram
 
 ![Mermaid diagram in the terminal](docs/screenshots/diagram.png)
 
-Mermaid diagram
+### Edit diff panel
 
 ![Edit diff panel](docs/screenshots/diff.png)
 
-Edit diff panel
+### Write panel
 
 ![Write panel](docs/screenshots/write.png)
 
-Write panel
+### Activity tab
 
 ![Activity tab](docs/screenshots/activity.png)
 
-Activity tab
+### Files tab
 
 ![Files tab](docs/screenshots/files.png)
 
-Files tab
+### Agents tab
 
 ![Agents tab](docs/screenshots/agents.png)
 
-Agents tab
+### Context tab
 
 ![Context tab](docs/screenshots/context.png)
 
-Context tab
+### MCP tab
 
 ![MCP tab](docs/screenshots/mcp.png)
 
-MCP tab
+### Skills tab
 
 ![Skills tab](docs/screenshots/skills.png)
-
-Skills tab
 
 ## Other ways to run
 
