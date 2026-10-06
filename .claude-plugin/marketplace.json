@@ -1,0 +1,11 @@
+{
+  "name": "paneline",
+  "owner": { "name": "Mark" },
+  "plugins": [
+    {
+      "name": "paneline",
+      "source": "./",
+      "description": "Side pane with Activity, Files, Agents, Context and MCP tabs, a status line, a restyled chat and terminal Mermaid diagrams."
+    }
+  ]
+}

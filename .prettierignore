@@ -1,0 +1,6 @@
+hooks/vendor
+.claude-plugin
+node_modules
+package-lock.json
+docs
+backlog/

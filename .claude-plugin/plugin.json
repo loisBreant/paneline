@@ -1,0 +1,47 @@
+{
+  "name": "paneline",
+  "version": "0.1.0",
+  "description": "Claude Code mod (plugin) that adds a side pane with Activity, Files, Agents, Context and MCP tabs, a status line above the prompt, a restyled chat, Mermaid diagrams in the terminal, tables, and code and diff panels. Colours follow both /color and the /theme (dark, light and others).",
+  "author": {
+    "name": "Mark"
+  },
+  "license": "MIT",
+  "keywords": [
+    "claude-code",
+    "claude-code-mod",
+    "claude-code-plugin",
+    "claude-mod",
+    "function-hooks",
+    "side-pane",
+    "sidebar",
+    "statusline",
+    "status-line",
+    "subagents",
+    "subagent-tree",
+    "agent-monitor",
+    "mcp",
+    "context-window",
+    "token-usage",
+    "file-tree",
+    "git-branches",
+    "mermaid",
+    "tables",
+    "diff",
+    "tui",
+    "terminal-ui",
+    "theme",
+    "ui",
+    "anthropic"
+  ],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "probe": {
+      "type": "boolean",
+      "title": "Render probe",
+      "description": "Log per-component render time to the debug log every 200 renders",
+      "default": false
+    }
+  },
+  "repository": "https://github.com/markneonin/paneline",
+  "homepage": "https://github.com/markneonin/paneline"
+}
