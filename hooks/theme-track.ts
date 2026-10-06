@@ -13,9 +13,8 @@ export function trackTheme(on: On): void {
   });
 
   on("config.set", { key: THEME_ROW }, async ($, e, next) => {
-    const result = await next(e);
-    if (result.deny === undefined) await storeTheme($, String(result.value));
-    return result;
+    await storeTheme($, String(e.value));
+    return next(e);
   });
 
   on("classic.ConfigChange", async ($, e, next) => {

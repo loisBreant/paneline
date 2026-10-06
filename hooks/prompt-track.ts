@@ -72,10 +72,14 @@ async function seed($: EngineInterface): Promise<void> {
 
 async function change($: EngineInterface, patch: Partial<PromptInfo>): Promise<void> {
   const current = await read($, promptInfoAtom);
-  const next = { ...current, ...patch };
-  if (next.model === current.model && next.effort === current.effort && next.cwd === current.cwd)
+  const updated = { ...current, ...patch };
+  if (
+    updated.model === current.model &&
+    updated.effort === current.effort &&
+    updated.cwd === current.cwd
+  )
     return;
-  await update($, promptInfoAtom, () => next);
+  await update($, promptInfoAtom, () => updated);
 }
 
 async function refreshColor($: EngineInterface, transcriptPath: string): Promise<void> {

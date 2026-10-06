@@ -78,6 +78,18 @@ Third-party marketplaces do not update by themselves. Turn on auto-update in `/p
 
 ![Spend tab](docs/screenshots/spend.png)
 
+## What it runs and reads
+
+paneline works only on your machine. It sends nothing over the network and asks for no keys or tokens.
+
+- **Programs it starts:** read-only `git` (`rev-parse`, `diff --numstat`, `log -g`) in the folders of the session and its subagents, for the branch names and the line counts in the Files tab and on agent cards; `grep` on the session transcript, to find the colour set with `/color`.
+- **Files it reads:** `~/.claude.json` and the project `.mcp.json` for the MCP tab; `SKILL.md` and command files of your skills and `~/.claude/plugins/installed_plugins.json` for the Skills tab; the session transcript, only through the `grep` above.
+- **Slash commands it runs:** `/mcp enable <server>` or `/mcp disable <server>`, only when you press that button in the MCP tab.
+- **Events it watches:** tool calls, prompts, subagent starts and stops, `/color`, `/theme` and `/config` changes. It passes every event on unchanged and never answers a permission prompt.
+- **What it stores:** its own state in Claude Code's plugin store on this machine.
+- **Command it adds:** `/session` opens the pane again after you close it.
+- `hooks/vendor/mermaid-text.js` is a build of [beautiful-mermaid](https://github.com/lukilabs/beautiful-mermaid) (MIT) that draws Mermaid diagrams as text.
+
 ## Other ways to run
 
 - In the fullscreen layout the pane docks beside the chat from 110 columns. In the main-screen layout (the default under tmux, or with `CLAUDE_CODE_NO_FLICKER=0`) it opens inline above the prompt at any width.
