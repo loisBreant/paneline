@@ -158,6 +158,14 @@ const RENDER_HINT_SECTION = {
   ].join(" "),
 } as const;
 
+const MODEL_COMMAND = "model";
+
+function openModelPicker($: EngineInterface): void {
+  void $.command
+    .run({ command: MODEL_COMMAND })
+    .catch((error: unknown) => $.ui.toast(`/${MODEL_COMMAND} failed: ${String(error)}`));
+}
+
 export function renderChat(on: On): void {
   on("prompt.compose", async ($, e, next) => {
     const composed = await next(e);
@@ -252,7 +260,7 @@ export function renderChat(on: On): void {
       <Box flexDirection="column">
         {e.props.maxRows >= BAND_ROWS_WITH_SPACER ? <Box height={1} /> : null}
         {theirs}
-        {promptInfoRow(ui, info, home, columnsOf(e), color, meters)}
+        {promptInfoRow(ui, info, home, columnsOf(e), color, meters, () => openModelPicker($))}
       </Box>
     );
   });
