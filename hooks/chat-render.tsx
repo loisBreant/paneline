@@ -27,6 +27,7 @@ import { metersOf, promptInfoRow } from "./prompt-info";
 import { PANE } from "./pane-tab";
 import { accentOf } from "./session-color";
 import { TABS } from "./tabs";
+import { isTerminal } from "./surface";
 
 const DIFF_TOOLS = new Set(["Edit", "Write"]);
 const TYPED = new Set(["composer", "bridge", "sdk"]);
@@ -178,12 +179,14 @@ export function renderChat(on: On): void {
   const copy: Copy = (text, press) => copyWithLatest(text, press);
 
   on("ui.render", { component: "UserMessage" }, async ($, e, next) => {
+    if (!isTerminal(e)) return next(e);
     if (e.props.isExpanded || !TYPED.has(e.props.origin.kind) || e.props.text.length > MAX_PROMPT)
       return next(e);
     return userBlock($.ui.resolve(e), e.props.text, layoutOf(columnsOf(e)), await currentFills($));
   });
 
   on("ui.render", { component: "AssistantMessage" }, async ($, e, next) => {
+    if (!isTerminal(e)) return next(e);
     if (e.props.text.length > MAX_REPLY_CHARS) return next(e);
     copyWithLatest = (text, press) => {
       void $.ui
@@ -206,6 +209,7 @@ export function renderChat(on: On): void {
   });
 
   on("ui.render", { component: "ToolGroup" }, ($, e, next) => {
+    if (!isTerminal(e)) return next(e);
     if (e.props.isExpanded) {
       e.props.calls.forEach((call) => call.tool_use_id && expandedCalls.add(call.tool_use_id));
       return next(e);
@@ -219,6 +223,7 @@ export function renderChat(on: On): void {
   });
 
   on("ui.render", { component: "ToolUse" }, ($, e, next) => {
+    if (!isTerminal(e)) return next(e);
     if (expandedCalls.has(e.props.tool_use_id)) return drawWithChanges($, e, next);
     return toolRow($, e, [e.props.tool_use_id], {
       calls: [e.props],
@@ -227,9 +232,12 @@ export function renderChat(on: On): void {
     });
   });
 
-  on("ui.render", { component: "ToolResult" }, ($, e, next) => drawWithChanges($, e, next));
+  on("ui.render", { component: "ToolResult" }, ($, e, next) =>
+    isTerminal(e) ? drawWithChanges($, e, next) : next(e),
+  );
 
-  on("ui.render", { component: "TurnDuration" }, async ($, e) => {
+  on("ui.render", { component: "TurnDuration" }, async ($, e, next) => {
+    if (!isTerminal(e)) return next(e);
     const [stats, fills] = await Promise.all([
       read($, memberOf(turnStatsAtom, { requestId: String(e.props.durationMs) })),
       currentFills($),
@@ -244,6 +252,7 @@ export function renderChat(on: On): void {
   });
 
   on("ui.render", { component: "AbovePrompt" }, async ($, e, next) => {
+    if (!isTerminal(e)) return next(e);
     if (e.props.hasSurvey) return next(e);
     const [theirs, usage, info, home, color, nowMs] = await Promise.all([
       next(e),
